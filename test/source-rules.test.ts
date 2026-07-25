@@ -87,6 +87,21 @@ describe('MCP-S003 command injection', () => {
     const ctx = sourceContext({}, source({ 'x.js': 'execFile("ls", ["-la", p]);' }));
     expect(await commandInjectionRule.check(ctx)).toEqual([]);
   });
+
+  it('does not flag a SQLite db.exec() with interpolated SQL (not a shell call)', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'db.exec(`ALTER TABLE t ADD COLUMN ${col} ${type}`);' }));
+    expect(await commandInjectionRule.check(ctx)).toEqual([]);
+  });
+
+  it('does not flag regexp.exec()', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'const m = /foo/.exec(`bar ${x}`);' }));
+    expect(await commandInjectionRule.check(ctx)).toEqual([]);
+  });
+
+  it('flags child_process exec on a cp-style receiver', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'cp.exec(`docker inspect ${container}`);' }));
+    expect(await commandInjectionRule.check(ctx)).toHaveLength(1);
+  });
 });
 
 describe('MCP-S004 env exfiltration', () => {

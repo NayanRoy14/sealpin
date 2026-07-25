@@ -60,3 +60,75 @@ better-mcp-notion
 @antidrift/mcp-notion
 @turingdance/database-mcp
 @edwardchu/mcp-database
+
+# --- Batch 2: scale to ~100 (reputable vendors + a representative long tail) ---
+
+# Vendor / well-known
+@brave/brave-search-mcp-server
+@hubspot/mcp-server
+@stripe/mcp
+@perplexity-ai/mcp-server
+@supabase/mcp-server-supabase
+@growthbook/mcp
+@winor30/mcp-server-datadog
+@cocal/google-calendar-mcp
+@gongrzhe/server-gmail-autoauth-mcp
+@piotr-agier/google-drive-mcp
+@a-bonus/google-docs-mcp
+firecrawl-mcp
+tavily-mcp
+n8n-mcp
+obsidian-mcp-server
+kubernetes-mcp-server
+mcp-server-kubernetes
+@currents/mcp
+@orval/mcp
+@serdnaley/metabase-mcp
+
+# Jira / Atlassian
+@aashari/mcp-server-atlassian-jira
+@atlassian-dc-mcp/jira
+@dsazz/mcp-jira
+mcp-jira
+backlog-mcp-server
+mcp-jira-confluence
+@nexus2520/jira-mcp-server
+
+# Search
+@ericthered926/duckduckgo-mcp-server
+mcp-searxng
+agent-search-mcp
+airweave-mcp-search
+@bfcmath/mcp-search
+
+# Docker / Kubernetes
+mcp-docker
+mcp-docker-server
+@rog0x/mcp-docker-tools
+@strowk/mcp-k8s
+@couleetech/mcp-k8s-server
+@patrickdappollonio/mcp-kubernetes-ro
+@munlib/mcp-kubernetes-pods
+
+# Weather (weekend-clone tier)
+@alexdemichieli/mcp-weather-server
+@smarterweather/mcp-weather
+hefeng-mcp-weather
+@timlukahorstmann/mcp-weather
+weather-forecast-mcp-server
+
+# Email / Stripe / misc
+mcp-email
+@codefuturist/email-mcp
+@skanda-yutori/mcp-send-email
+@codespar/mcp-stripe
+@antidrift/mcp-jira
+@antidrift/mcp-stripe
+@sylphlab/pdf-reader-mcp
+@cyanheads/brapi-mcp-server
+@furlpay/travel-mcp
+mcp-proxy
+tai-mcp
+clawql-mcp
+brilliant-directories-mcp
+@pipeworx/mcp-open-meteo

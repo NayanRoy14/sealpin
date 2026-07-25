@@ -1,8 +1,43 @@
 import type { Finding, Rule } from '../../types/rule.js';
 import { makeFinding } from '../util.js';
-import { calleeName, isNode, loc, parseFile, sourceOf, walk } from './ast.js';
+import { isNode, loc, parseFile, sourceOf, walk, type AstNode } from './ast.js';
 
-const EXEC_METHODS = new Set(['exec', 'execSync', 'spawn', 'spawnSync', 'execFile', 'execFileSync']);
+// Distinctive child_process methods — safe to match on any object.
+const UNAMBIGUOUS = new Set(['execSync', 'spawnSync', 'execFile', 'execFileSync']);
+// Ambiguous names that collide with unrelated APIs (db.exec, regexp.exec,
+// stream.spawn). Matched only as a bare global call or on a child_process-like
+// receiver, never on an arbitrary object.
+const AMBIGUOUS = new Set(['exec', 'spawn']);
+const CHILDPROC_OBJ = /^(cp|proc|child_?process|childProcess|shell)$/i;
+
+/**
+ * The child_process exec/spawn method being called, or null. This deliberately
+ * does NOT match `db.exec(sql)` or `regexp.exec(str)` — only genuine
+ * child_process calls (a bare global from `const {exec} = require(...)`, or a
+ * member on a child_process-like object such as `cp.exec`).
+ */
+function execMethod(node: AstNode): string | null {
+  const callee = node['callee'];
+  if (!isNode(callee)) return null;
+
+  if (callee.type === 'Identifier') {
+    const name = callee['name'];
+    return typeof name === 'string' && (UNAMBIGUOUS.has(name) || AMBIGUOUS.has(name)) ? name : null;
+  }
+
+  if (callee.type === 'MemberExpression') {
+    const prop = callee['property'];
+    const name = isNode(prop) && prop.type === 'Identifier' && typeof prop['name'] === 'string' ? prop['name'] : null;
+    if (!name) return null;
+    if (UNAMBIGUOUS.has(name)) return name;
+    if (!AMBIGUOUS.has(name)) return null;
+    const obj = callee['object'];
+    const objName = isNode(obj) && obj.type === 'Identifier' && typeof obj['name'] === 'string' ? obj['name'] : '';
+    return CHILDPROC_OBJ.test(objName) ? name : null;
+  }
+
+  return null;
+}
 
 /** A string built from runtime values: a template with holes, or a `+` concat touching a non-literal. */
 function isDynamicString(node: unknown): boolean {
@@ -44,8 +79,8 @@ export const commandInjectionRule: Rule = {
       if (!ast) continue;
       walk(ast, (node) => {
         if (node.type !== 'CallExpression') return;
-        const name = calleeName(node);
-        if (!name || !EXEC_METHODS.has(name)) return;
+        const name = execMethod(node);
+        if (!name) return;
         const args = node['arguments'];
         const first = Array.isArray(args) ? args[0] : undefined;
         if (!isDynamicString(first)) return;
