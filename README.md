@@ -1,5 +1,8 @@
 # sealpin
 
+[![ci](https://github.com/NayanRoy14/sealpin/actions/workflows/ci.yml/badge.svg)](https://github.com/NayanRoy14/sealpin/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/sealpin.svg)](https://www.npmjs.com/package/sealpin)
+
 **`npm audit` for the MCP servers your AI agent trusts.**
 
 sealpin is a supply-chain and prompt-injection scanner for [Model Context Protocol](https://modelcontextprotocol.io) servers. You point it at your MCP config and it tells you which servers can quietly read your SSH keys, which ones changed their tool definitions since you approved them, and which ones are hiding instructions to the model inside tool descriptions.
