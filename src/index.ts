@@ -67,6 +67,22 @@ export {
   type SourceKind,
 } from './resolve/index.js';
 
+// proxy (runtime enforcement)
+export {
+  runProxy,
+  ProxyEngine,
+  createAuditSink,
+  PolicySchema,
+  resolveServerPolicy,
+  evaluateToolCall,
+  errorResponse,
+  type RunProxyOptions,
+  type Policy,
+  type ServerPolicy,
+  type Decision,
+  type AuditEvent,
+} from './proxy/index.js';
+
 // probe (live, sandboxed manifest extraction)
 export {
   probeServer,

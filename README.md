@@ -58,6 +58,37 @@ sealpin diff     human-readable changeset of what actually changed
 
 Canonicalization is order-independent and whitespace-normalized, so reordering a server's tools or reflowing a description doesn't register as drift — only a real change to what the model is told does.
 
+## Runtime enforcement — `sealpin proxy`
+
+Everything above is a *scanner* — it observes. `sealpin proxy` is a *control plane* — it **enforces at call time**. It runs as a transparent stdio proxy between your MCP client and a server, mediating every JSON-RPC message:
+
+```jsonc
+// in your MCP client config, wrap the server:
+{ "command": "sealpin", "args": ["proxy", "--policy", "sealpin.policy.json", "--", "npx", "-y", "@scope/server"] }
+```
+
+On every `tools/call` it evaluates a policy and **blocks the call before the server ever sees it** (the model gets a policy error instead); on every `tools/list` it can **strip tools whose definition drifted** from `sealpin.json` (runtime rug-pull defense); and it audits every decision.
+
+```jsonc
+// sealpin.policy.json
+{
+  "version": 1,
+  "default": {
+    "denyTools": ["delete_file"],
+    "denyArgumentPatterns": [{ "arg": "path", "pattern": "[.]ssh|[.]aws|[.]env" }],
+    "blockOnDrift": true
+  }
+}
+```
+
+```
+[sealpin:demo] tool-call read_file  DENY — argument "path" matches denied pattern /[.]ssh|[.]aws|[.]env/
+[sealpin:demo] blocked  delete_file  — tool "delete_file" is denied by policy
+[sealpin:demo] tool-call read_file  ALLOW
+```
+
+Flags: `--policy <file>`, `--lock <file>` (drift source, default `sealpin.json`), `--server <name>`, `--audit <file>` (JSONL), `--dry-run` (log decisions without blocking). Cross-session data-flow taint (blocking data from an untrusted-content tool from reaching an exfil tool) is the natural next layer and is not built yet.
+
 ## What it detects
 
 Run `sealpin rules` for the live list, or `sealpin explain <id>` for any one rule.

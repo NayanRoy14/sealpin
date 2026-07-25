@@ -1,6 +1,9 @@
 #!/usr/bin/env node
+import { readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { Command, Option } from 'commander';
 import { discoverServers, discoverFromFile } from '../discover/index.js';
+import { runProxy, createAuditSink, PolicySchema, type RunProxyOptions } from '../proxy/index.js';
 import type { ServerConfig } from '../types/config.js';
 import type { Severity } from '../types/rule.js';
 import { ALL_RULES, RULE_DOCS, getRule, meetsSeverity, severityOf } from '../rules/index.js';
@@ -247,6 +250,43 @@ withManifestSource(
       }
     } catch (err) {
       fail(err);
+    }
+  });
+
+// ---------------------------------------------------------------- proxy
+program
+  .command('proxy')
+  .description('Run an MCP server behind sealpin, enforcing policy and blocking manifest drift at call time')
+  .argument('[command...]', 'the MCP server command to run, after -- (e.g. -- npx -y @scope/server)')
+  .option('-p, --policy <file>', 'enforcement policy JSON')
+  .option('-l, --lock <file>', 'lockfile to block tool drift against', DEFAULT_LOCKFILE_NAME)
+  .option('-s, --server <name>', 'server name for policy/lock lookup (default: the command basename)')
+  .option('-a, --audit <file>', 'append audit events (JSONL) here instead of stderr')
+  .option('--dry-run', 'log decisions but do not block anything')
+  .action(async (commandParts: string[], opts) => {
+    try {
+      if (!commandParts || commandParts.length === 0) {
+        console.error('error: no server command. Usage: sealpin proxy [options] -- <command> [args...]');
+        process.exitCode = ExitCode.Error;
+        return;
+      }
+      const [command, ...args] = commandParts as [string, ...string[]];
+      const serverName = (opts.server as string | undefined) ?? basename(command);
+
+      const runOpts: RunProxyOptions = { command, args, serverName, onAudit: createAuditSink(opts.audit) };
+
+      if (opts.policy) {
+        runOpts.policy = PolicySchema.parse(JSON.parse(await readFile(opts.policy, 'utf-8')));
+      }
+      const lock = await readLockfile(opts.lock).catch(() => null);
+      const lockedTools = lock?.entries.find((e) => e.server === serverName)?.manifest.tools;
+      if (lockedTools) runOpts.lockedTools = lockedTools;
+      if (opts.dryRun) runOpts.dryRun = true;
+
+      process.exitCode = await runProxy(runOpts);
+    } catch (err) {
+      console.error('sealpin proxy: ' + (err instanceof Error ? err.message : String(err)));
+      process.exitCode = ExitCode.Error;
     }
   });
 

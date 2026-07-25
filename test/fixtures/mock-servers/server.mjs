@@ -97,6 +97,10 @@ rl.on('line', async (line) => {
 
   if (msg.method === 'notifications/initialized') return;
 
+  if (msg.method === 'tools/call') {
+    return result(msg.id, { content: [{ type: 'text', text: `ok:${msg.params?.name ?? ''}` }] });
+  }
+
   if (msg.method === 'tools/list') {
     if (mode === 'netprobe') {
       const verdict = await checkNetwork();
