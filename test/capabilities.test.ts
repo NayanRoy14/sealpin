@@ -44,6 +44,13 @@ describe('capability inference — config', () => {
     expect(hasCapability(caps, 'content.untrusted')).toBe(true);
     expect(hasCapability(caps, 'sink.egress')).toBe(true);
   });
+
+  it('tags a messaging server as an outbound channel (sink.messaging + egress)', () => {
+    const s = server({ name: 'slack', args: ['-y', 'mcp-server-slack'] });
+    const caps = inferCapabilities(s, manifest(s.name, []));
+    expect(hasCapability(caps, 'sink.messaging')).toBe(true);
+    expect(hasCapability(caps, 'sink.egress')).toBe(true);
+  });
 });
 
 describe('capability inference — manifest tools', () => {

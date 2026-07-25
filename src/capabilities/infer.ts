@@ -23,6 +23,14 @@ const NAME_RULES: CapRule[] = [
     reason: 'accesses a private data store',
   },
   {
+    // Messaging/notification servers are an outbound channel by their nature —
+    // their purpose is to send content somewhere the recipient (or an attacker)
+    // can read it.
+    re: /slack|discord|telegram|gmail|\bemail\b|\bmail\b|twilio|\bsms\b|sendgrid|mailgun|postmark|nodemailer|webhook/i,
+    caps: ['sink.messaging', 'sink.egress'],
+    reason: 'messaging/notification server (outbound channel)',
+  },
+  {
     re: /fetch|\bsearch\b|brave|duckduckgo|perplexity|tavily|puppeteer|playwright|firecrawl|crawl|scrape|browser|\bweb\b|context7|\bhttp\b/i,
     caps: ['content.untrusted', 'sink.egress'],
     reason: 'web/content-fetching server',

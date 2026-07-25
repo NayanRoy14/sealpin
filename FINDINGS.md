@@ -93,22 +93,73 @@ in one function that is exfiltrated by another is not connected, and non-esbuild
 bundles (webpack/rollup) are not de-vendored, so a `new Function` from a bundled
 dependency can still surface. These are documented, not silently ignored.
 
-## Responsible disclosure
-
-This public write-up is deliberately **aggregate**: it names no package in
-connection with a potential weakness. Per policy, any finding that warrants a
-maintainer's attention is contacted privately first (SECURITY.md / repo email),
-with a 90-day window, and only aggregate statistics are published until a fix
-ships or the maintainer is unresponsive and the risk is active. The per-package
-raw results (`scripts/ecosystem-results.json`) are kept local and untracked.
-
-## Status
+## Status (source/supply-chain study)
 
 Aggregate study over 109 packages. The takeaway: across a broad slice of the
 real MCP ecosystem, there were no confirmed exploitable vulnerabilities, but a
 real minority of servers interpolate tool-controlled input into shell execution
 (worth review). Dependency-aware de-vendoring now recovers first-party code from
 published esbuild bundles, so the earlier "unauditable" gap closed (0% in this
-batch) and vendored-dependency false positives dropped. The rules are precise on
-a server's own source; the residual work is data-flow-aware refinement of
-`MCP-S004`/`S006`, and de-vendoring support for non-esbuild bundlers.
+batch) and vendored-dependency false positives dropped.
+
+---
+
+# Cross-server composition study
+
+A separate study of the `MCP-X*` rules, which reason about the *combination* of
+servers loaded in one agent context rather than any single server.
+
+Reproduce with: `node scripts/scenarios.mjs`.
+
+## Method
+
+There is no public corpus of real users' MCP configs (they are private), so this
+uses **14 representative setups** built from real published servers — the
+combinations people actually configure (a coding assistant = filesystem + github
++ web-search + shell; a research assistant = web-search + fetch + notion +
+filesystem; a payments agent = stripe + fetch + filesystem; etc.), plus a few
+deliberately conservative ones. Capabilities are inferred from the config alone;
+nothing is executed.
+
+These are *representative scenarios*, not a random sample of real users' configs
+— the honest framing is "how often does the trifecta appear in typical setups,"
+not "N% of real users are vulnerable."
+
+## Result
+
+| Composition risk | Scenarios |
+|------------------|-----------|
+| **Lethal trifecta (`MCP-X001`)** | **10 / 14 (71%)** |
+| Untrusted content → exec (`MCP-X002`) | 2 / 14 (14%) |
+| Confused deputy (`MCP-X003`) | 0 / 14 |
+| Any composition finding | 10 / 14 (71%) |
+
+**Roughly seven in ten realistic multi-tool agent setups contain a lethal-trifecta
+path** — private-data access, untrusted-content intake, and an outbound channel
+co-loaded in one context — even though every individual server is reasonable. The
+clean scenarios are exactly the ones you'd expect: web-browse-only (no private
+data), a read-only local DB, a scoped-filesystem scratchpad, and a
+DevOps/SRE set with no untrusted-content ingress.
+
+This is the core argument for composition-level analysis: the danger is not in
+any one server a per-server linter would flag, it is in the *combination* that a
+user assembles without realising the three legs are now in one room.
+
+## Honest limitations
+
+- Config-only inference **under-tags** some capabilities that only a manifest
+  reveals — e.g. an issue-tracker's `create_issue` (a subtle exfil channel) or a
+  server whose tool returns untrusted content it does not advertise in its name.
+  So the 71% is a floor, not a ceiling; `--probe` manifests would raise recall.
+- `MCP-X003` (single-server confused deputy) is rare in realistic setups because
+  people split credential-holding and content-fetching across servers — which is
+  exactly the cross-server trifecta the other rules catch.
+
+## Responsible disclosure
+
+Both studies are deliberately **aggregate**: they name no package in connection
+with a potential weakness. Per policy, any finding warranting a maintainer's
+attention is contacted privately first (SECURITY.md / repo email), with a 90-day
+window, and only aggregate statistics are published until a fix ships or the
+maintainer is unresponsive and the risk is active. Per-package raw results
+(`scripts/ecosystem-results.json`) are kept local and untracked.
