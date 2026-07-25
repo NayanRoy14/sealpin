@@ -17,7 +17,7 @@ import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { relative } from 'node:path';
 
-import { scanServers, severityOf } from '../dist/index.js';
+import { scanServers, severityOf, analyzableSource } from '../dist/index.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -109,23 +109,6 @@ async function resolveTarball(spec) {
   return { version, tarball };
 }
 
-/**
- * A file is a bundle/minified artifact (deps inlined) rather than first-party
- * source when it carries esbuild's `// node_modules/` path comments or has an
- * extremely long line (minified). Analysing these measures the server's
- * *dependencies*, not the server, so they are excluded.
- */
-function isBundle(content) {
-  const markers = content.match(/\/\/ node_modules\//g);
-  if (markers && markers.length >= 3) return true;
-  let lineLen = 0;
-  for (let i = 0; i < content.length; i++) {
-    if (content.charCodeAt(i) === 10) lineLen = 0;
-    else if (++lineLen > 2000) return true;
-  }
-  return false;
-}
-
 async function scanPackage(spec) {
   const { version, tarball } = await resolveTarball(spec);
   const res = await fetch(tarball);
@@ -148,11 +131,17 @@ async function scanPackage(spec) {
     candidates.push({ relPath: rel, content: e.content.toString('utf-8') });
   }
 
-  const firstParty = candidates.filter((c) => !isBundle(c.content));
-  // Prefer src/ (unambiguously first-party, unbundled) when present, to avoid
-  // double-counting a package that ships both src/*.ts and compiled dist/*.js.
-  const src = firstParty.filter((c) => c.relPath === 'src' || c.relPath.startsWith('src/'));
-  const chosen = (src.length ? src : firstParty).slice(0, MAX_FILES);
+  // Dependency-aware: pass ordinary source through, de-vendor esbuild bundles to
+  // their first-party regions, and drop opaque (minified) bundles.
+  const analyzable = [];
+  for (const c of candidates) {
+    const a = analyzableSource(c.content);
+    if (a) analyzable.push({ relPath: c.relPath, content: a.content });
+  }
+  // Prefer src/ (unbundled first-party) when present, to avoid double-counting a
+  // package that ships both src/*.ts and a de-vendored dist bundle of the same code.
+  const src = analyzable.filter((c) => c.relPath === 'src' || c.relPath.startsWith('src/'));
+  const chosen = (src.length ? src : analyzable).slice(0, MAX_FILES);
   const bundleOnly = chosen.length === 0 && candidates.length > 0;
 
   const files = chosen.map((c) => ({ path: `package/${c.relPath}`, relPath: c.relPath, content: c.content }));

@@ -16,9 +16,12 @@ For each package: fetch its published tarball, extract it in memory, and run the
 the *server* and not its dependencies:
 
 - **`src/` is preferred** when shipped (unbundled first-party source).
-- **Bundled/minified files are excluded** — a file with esbuild `// node_modules/`
-  markers or extremely long lines inlines dependency code, so analysing it
-  measures Ajv/`debug`/ONNX/etc., not the server.
+- **Bundles are de-vendored, not skipped.** Most servers ship a compiled `dist/`
+  that inlines their dependencies. esbuild delimits each inlined module with a
+  `// <path>` comment; sealpin keeps only the first-party regions (paths without
+  `node_modules/`) and blanks the vendored ones, line-preserving. So a bundle is
+  analysed as the server's own code, not as Ajv/`debug`/ONNX. Bundles that can't
+  be split confidently (minified single-line output) are reported as opaque.
 - **Test, example, and template code is excluded** — shipped in some tarballs,
   but not the server's runtime attack surface.
 
@@ -32,24 +35,30 @@ real issues are most likely.
 
 ## Headline results
 
-- **109 scanned; 7 (6%) ship no auditable first-party source** — only a bundled
-  or minified artifact. You cannot review what a bundle-only package actually
-  does from what it publishes. A supply-chain **transparency** finding in itself.
-- **101 source-analyzable; 34 (34%) had at least one finding.**
+- **109 scanned; 108 source-analyzable.** De-vendoring recovered first-party code
+  from every esbuild bundle, so **0 packages were unauditable** in this batch
+  (an earlier, skip-the-whole-bundle approach left 6% opaque). Minified or
+  non-esbuild bundles would still be opaque — none remained so here.
+- **36 (33%) had at least one finding.**
 - **After triage, no confirmed, exploitable vulnerabilities.** A handful of
   servers interpolate runtime, tool-controlled values into shell execution — a
   genuine command-injection *shape* worth a maintainer's review. Those are being
   handled by private disclosure per the policy below and are not named here.
 
-## By rule (of 101 source-analyzable packages), with triage
+De-vendoring also *removed* false positives: several packages that previously
+lit up (Ajv/`depd`/ONNX inside their bundle) are now correctly clean, and the
+findings that remain are on the server's own code (e.g. a Figma server's own
+`api.figma.com` calls, on their real line numbers inside the bundle).
+
+## By rule (of 108 source-analyzable packages), with triage
 
 | Rule | Packages | What the flags actually were |
 |------|----------|------------------------------|
 | `MCP-S002` install script | 3% | Real `pre/postinstall` scripts — flagged for transparency (review the script), not presumed malicious. |
 | `MCP-S003` command injection | 5% | One common, defensible idiom (opening a URL in the browser during OAuth); and a genuine subset that interpolate tool-controlled values (a container name, a cron entry) into a shell command — privately disclosed. |
-| `MCP-S004` whole-env capture | 23% | Almost all benign: spreading `process.env` into a spawned child process, dotenv-style `parseEnv(process.env)`, config loading, one intentional demo tool. Low signal for actual exfiltration intent. |
-| `MCP-S005` hardcoded egress | 6% | All legitimate first-party endpoints — a Notion server calling `api.notion.com`, a BrowserStack server calling `percy.io`, self-update checks against the npm registry. |
-| `MCP-S006` dynamic code exec | 4% | A vendored ONNX-Runtime WASM file (`new Function`); plugin loaders and internal `import(join(dir, "…"))` bin-wrappers. No attacker-controlled code execution. |
+| `MCP-S004` whole-env capture | 24% | Almost all benign: spreading `process.env` into a spawned child process, dotenv-style `parseEnv(process.env)`, config loading, one intentional demo tool. Low signal for actual exfiltration intent. |
+| `MCP-S005` hardcoded egress | 7% | All legitimate first-party endpoints — a Notion server calling `api.notion.com`, a Figma server calling `api.figma.com`, self-update checks against the npm registry. |
+| `MCP-S006` dynamic code exec | 5% | A vendored ONNX-Runtime WASM file (`new Function`); plugin loaders and internal `import(join(dir, "…"))` bin-wrappers. No attacker-controlled code execution. |
 
 ## What this says about the rules
 
@@ -90,7 +99,8 @@ raw results (`scripts/ecosystem-results.json`) are kept local and untracked.
 Aggregate study over 109 packages. The takeaway: across a broad slice of the
 real MCP ecosystem, there were no confirmed exploitable vulnerabilities, but a
 real minority of servers interpolate tool-controlled input into shell execution
-(worth review), and 6% ship code that cannot be audited from the registry at
-all. The rules are precise on a server's own source; the residual work is
-data-flow-aware refinement of `MCP-S004`/`S006` and dependency-aware scanning of
-bundle-only packages.
+(worth review). Dependency-aware de-vendoring now recovers first-party code from
+published esbuild bundles, so the earlier "unauditable" gap closed (0% in this
+batch) and vendored-dependency false positives dropped. The rules are precise on
+a server's own source; the residual work is data-flow-aware refinement of
+`MCP-S004`/`S006`, and de-vendoring support for non-esbuild bundlers.
