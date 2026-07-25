@@ -122,15 +122,26 @@ function hasBinary(name: string): boolean {
 }
 
 /**
+ * Overridable environment probes, so the pure command-construction logic can be
+ * unit-tested for every platform without actually being on it.
+ */
+export interface SandboxEnv {
+  platform?: NodeJS.Platform;
+  hasBinary?: (name: string) => boolean;
+}
+
+/**
  * Wraps the server's launch command in an OS sandbox when one is available on
  * this platform, giving network and filesystem isolation. When none is
  * available (notably on Windows), returns the command unwrapped with
  * `process-only` isolation — the caller decides whether that is acceptable
  * (see --require-sandbox).
  */
-export function wrapWithSandbox(command: string, args: string[], cwd: string): WrappedCommand {
-  if (process.platform === 'linux') {
-    if (hasBinary('bwrap')) {
+export function wrapWithSandbox(command: string, args: string[], cwd: string, env: SandboxEnv = {}): WrappedCommand {
+  const platform = env.platform ?? process.platform;
+  const has = env.hasBinary ?? hasBinary;
+  if (platform === 'linux') {
+    if (has('bwrap')) {
       return {
         command: 'bwrap',
         args: [
@@ -152,7 +163,7 @@ export function wrapWithSandbox(command: string, args: string[], cwd: string): W
         isolation: { mechanism: 'bubblewrap', network: true, filesystem: true },
       };
     }
-    if (hasBinary('firejail')) {
+    if (has('firejail')) {
       return {
         command: 'firejail',
         args: ['--quiet', '--net=none', `--private=${cwd}`, '--', command, ...args],
@@ -161,7 +172,7 @@ export function wrapWithSandbox(command: string, args: string[], cwd: string): W
     }
   }
 
-  if (process.platform === 'darwin' && hasBinary('sandbox-exec')) {
+  if (platform === 'darwin' && has('sandbox-exec')) {
     // Deny-by-default profile that still allows process execution and file
     // reads (needed to launch node/npx) but blocks all network access.
     const profile = [

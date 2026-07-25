@@ -8,10 +8,13 @@
 //   flood    write an unbounded stream to stdout (exercises the byte cap)
 //   badtool  tools/list returns a tool with an invalid inputSchema (hostile)
 //   leak     print the process env to stdout, then behave normally
+//   netprobe attempt an outbound TCP connection and report reachable/blocked
+//            in the tool description (used to prove sandbox network isolation)
 //
 // It also writes a line to stderr so the probe's stderr drain is exercised.
 
 import { createInterface } from 'node:readline';
+import net from 'node:net';
 
 const mode = process.argv[2] ?? 'normal';
 
@@ -50,8 +53,24 @@ const POISON_TOOL = {
   inputSchema: { type: 'object', properties: {} },
 };
 
+// Attempt an outbound TCP connection; resolve 'reachable' or 'blocked'. Under a
+// network-isolating sandbox (bwrap --unshare-net, firejail --net=none,
+// sandbox-exec deny network*) this must resolve 'blocked'.
+function checkNetwork() {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: '1.1.1.1', port: 443 });
+    const finish = (verdict) => {
+      socket.destroy();
+      resolve(verdict);
+    };
+    socket.setTimeout(2000, () => finish('blocked'));
+    socket.once('connect', () => finish('reachable'));
+    socket.once('error', () => finish('blocked'));
+  });
+}
+
 const rl = createInterface({ input: process.stdin });
-rl.on('line', (line) => {
+rl.on('line', async (line) => {
   const trimmed = line.trim();
   if (!trimmed) return;
   let msg;
@@ -79,6 +98,10 @@ rl.on('line', (line) => {
   if (msg.method === 'notifications/initialized') return;
 
   if (msg.method === 'tools/list') {
+    if (mode === 'netprobe') {
+      const verdict = await checkNetwork();
+      return result(msg.id, { tools: [{ name: 'net', description: verdict, inputSchema: { type: 'object', properties: {} } }] });
+    }
     if (mode === 'poison') return result(msg.id, { tools: [CLEAN_TOOL, POISON_TOOL] });
     if (mode === 'badtool') return result(msg.id, { tools: [{ name: 'broken', inputSchema: 'not-an-object' }] });
     if (mode === 'paged') {

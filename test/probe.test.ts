@@ -94,6 +94,58 @@ describe('sandbox wrapping', () => {
   });
 });
 
+// Command construction is verified for every platform via injected probes, so
+// the exact sandbox invocations are checked even off that platform.
+describe('wrapWithSandbox arg construction (per platform)', () => {
+  const only = (bin: string) => (n: string) => n === bin;
+  const CWD = '/tmp/probe-cwd';
+
+  it('bubblewrap: blocks network, and binds the cwd back AFTER the tmpfs so --chdir works', () => {
+    const w = wrapWithSandbox('node', ['s.js'], CWD, { platform: 'linux', hasBinary: only('bwrap') });
+    expect(w.command).toBe('bwrap');
+    expect(w.isolation).toEqual({ mechanism: 'bubblewrap', network: true, filesystem: true });
+    expect(w.args).toContain('--unshare-net');
+
+    const tmpfsIdx = w.args.indexOf('--tmpfs');
+    const bindIdx = w.args.indexOf('--bind');
+    expect(tmpfsIdx).toBeGreaterThanOrEqual(0);
+    expect(bindIdx).toBeGreaterThan(tmpfsIdx); // the fix: bind must come after the tmpfs
+    expect(w.args.slice(bindIdx, bindIdx + 3)).toEqual(['--bind', CWD, CWD]);
+
+    const chdirIdx = w.args.indexOf('--chdir');
+    expect(w.args[chdirIdx + 1]).toBe(CWD);
+
+    const sep = w.args.indexOf('--');
+    expect(w.args.slice(sep + 1)).toEqual(['node', 's.js']); // command runs after the separator
+  });
+
+  it('firejail: used when bwrap is absent, with --net=none', () => {
+    const w = wrapWithSandbox('node', ['s.js'], CWD, { platform: 'linux', hasBinary: only('firejail') });
+    expect(w.command).toBe('firejail');
+    expect(w.args).toContain('--net=none');
+    expect(w.isolation.network).toBe(true);
+    expect(w.args.slice(-2)).toEqual(['node', 's.js']);
+  });
+
+  it('sandbox-exec: used on macOS with a network-deny profile', () => {
+    const w = wrapWithSandbox('node', ['s.js'], CWD, { platform: 'darwin', hasBinary: () => true });
+    expect(w.command).toBe('sandbox-exec');
+    expect(w.args.join(' ')).toContain('deny network');
+    expect(w.args.slice(-2)).toEqual(['node', 's.js']);
+  });
+
+  it('process-only with NO network isolation on Windows', () => {
+    const w = wrapWithSandbox('node', ['s.js'], CWD, { platform: 'win32', hasBinary: () => true });
+    expect(w).toEqual({ command: 'node', args: ['s.js'], isolation: { mechanism: 'process-only', network: false, filesystem: false } });
+  });
+
+  it('process-only on Linux when no sandbox binary is installed', () => {
+    const w = wrapWithSandbox('node', ['s.js'], CWD, { platform: 'linux', hasBinary: () => false });
+    expect(w.isolation.mechanism).toBe('process-only');
+    expect(w.isolation.network).toBe(false);
+  });
+});
+
 describe('ProbeManifestSource', () => {
   it('loads a manifest for a healthy server', async () => {
     const src = new ProbeManifestSource({ timeoutMs: 5000 });
