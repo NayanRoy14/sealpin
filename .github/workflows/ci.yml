@@ -25,9 +25,13 @@ jobs:
       # Install bubblewrap so the probe sandbox integration tests actually run
       # on real Linux (they auto-skip where no sandbox is available). macOS has
       # sandbox-exec preinstalled; Windows runs process-only and skips them.
-      - name: Install bubblewrap (Linux)
+      - name: Install bubblewrap + enable unprivileged userns (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+        run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor,
+          # which blocks bwrap. Allow them so the sandbox tests can run.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
       - run: npm ci
       - run: npm run typecheck

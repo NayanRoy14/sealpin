@@ -52,6 +52,7 @@ export async function handshakeToolsList(opts: ProbeClientOptions): Promise<Tool
   const pending = new Map<number, Pending>();
   let nextId = 1;
   let stdoutBuf = '';
+  let stderrTail = '';
   let bytesRead = 0;
   let settled = false;
 
@@ -86,9 +87,14 @@ export async function handshakeToolsList(opts: ProbeClientOptions): Promise<Tool
       if (child.stdin && !child.stdin.destroyed) child.stdin.write(line);
     }
 
-    child.on('error', (err) => finish(new Error(`failed to launch server: ${err.message}`)));
+    // Surface the child's stderr tail on failure — otherwise a sandbox that
+    // refuses to start (e.g. "bwrap: Creating new namespace failed") is an
+    // undiagnosable "exited code 1".
+    const withStderr = (msg: string): string => (stderrTail.trim() ? `${msg} — stderr: ${stderrTail.trim()}` : msg);
+
+    child.on('error', (err) => finish(new Error(withStderr(`failed to launch server: ${err.message}`))));
     child.on('exit', (code, signal) => {
-      if (!settled) finish(new Error(`server exited before handshake completed (code=${code}, signal=${signal})`));
+      if (!settled) finish(new Error(withStderr(`server exited before handshake completed (code=${code}, signal=${signal})`)));
     });
 
     child.stdout.setEncoding('utf-8');
@@ -114,6 +120,7 @@ export async function handshakeToolsList(opts: ProbeClientOptions): Promise<Tool
     child.stderr.setEncoding('utf-8');
     child.stderr.on('data', (chunk: string) => {
       bytesRead += Buffer.byteLength(chunk, 'utf-8');
+      stderrTail = (stderrTail + chunk).slice(-2048); // keep a bounded tail for diagnostics
       if (bytesRead > maxBytes) finish(new Error(`server exceeded output cap of ${maxBytes} bytes`));
     });
 
