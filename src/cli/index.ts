@@ -3,8 +3,9 @@ import { Command, Option } from 'commander';
 import { discoverServers, discoverFromFile } from '../discover/index.js';
 import type { ServerConfig } from '../types/config.js';
 import type { Severity } from '../types/rule.js';
-import { ALL_RULES, RULE_DOCS, getRule } from '../rules/index.js';
+import { ALL_RULES, RULE_DOCS, getRule, meetsSeverity, severityOf } from '../rules/index.js';
 import { scanServers, hasFindingAtOrAbove, type ManifestSource } from '../scan/index.js';
+import type { Finding } from '../types/rule.js';
 import { LocalSourceResolver } from '../resolve/index.js';
 import {
   lock,
@@ -30,7 +31,9 @@ interface CommonOpts {
 
 async function discover(opts: CommonOpts): Promise<ServerConfig[]> {
   if (opts.config) return discoverFromFile(opts.config);
-  return discoverServers();
+  return discoverServers({
+    onWarn: (client, message) => console.error(color.yellow(`  ! skipped ${client} config: `) + message),
+  });
 }
 
 function applyColor(opts: CommonOpts): void {
@@ -78,19 +81,25 @@ withManifestSource(
       const servers = await discover(opts);
       const source = resolveManifestSource(opts as SourceOpts);
       const sourceResolver = new LocalSourceResolver(opts.sourceDir ? { dir: opts.sourceDir } : {});
+      // Scan without the display filter so the --fail-on gate always sees every
+      // finding; --severity only affects what is rendered.
       const summary = await scanServers(servers, {
         ...(source ? { manifestSource: source } : {}),
         sourceResolver,
-        ...(opts.severity ? { minSeverity: opts.severity as Severity } : {}),
       });
 
-      if (opts.json) console.log(renderJson(summary));
-      else if (opts.sarif) console.log(renderSarif(summary));
-      else console.log(renderText(summary));
+      // The CI gate is evaluated on the complete finding set, independent of --severity.
+      const gated = hasFindingAtOrAbove(summary.findings, opts.failOn as Severity);
 
-      process.exitCode = hasFindingAtOrAbove(summary.findings, opts.failOn as Severity)
-        ? ExitCode.Findings
-        : ExitCode.Clean;
+      const displayed = opts.severity
+        ? { ...summary, findings: filterBySeverity(summary.findings, opts.severity as Severity) }
+        : summary;
+
+      if (opts.json) console.log(renderJson(displayed));
+      else if (opts.sarif) console.log(renderSarif(displayed));
+      else console.log(renderText(displayed));
+
+      process.exitCode = gated ? ExitCode.Findings : ExitCode.Clean;
     } catch (err) {
       fail(err);
     }
@@ -283,6 +292,10 @@ function warnMissing(missing: string[]): void {
   if (missing.length > 0) {
     console.log(color.dim(`  (no manifest for: ${missing.join(', ')})`));
   }
+}
+
+function filterBySeverity(findings: Finding[], min: Severity): Finding[] {
+  return findings.filter((f) => meetsSeverity(severityOf(f.ruleId), min));
 }
 
 function short(hash?: string): string {

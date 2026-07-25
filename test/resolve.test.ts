@@ -27,6 +27,23 @@ describe('LocalSourceResolver', () => {
     const src = await resolver.resolve(server({ command: 'npx', args: ['-y', 'some-remote-pkg'] }));
     expect(src).toBeNull();
   });
+
+  it('never treats a filesystem-root argument as source (regression)', async () => {
+    // A filesystem server's "/" arg is its operating target, not its code. It
+    // must not cause the whole drive to be scanned as source.
+    const resolver = new LocalSourceResolver();
+    const src = await resolver.resolve(
+      server({ command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/'] }),
+    );
+    expect(src).toBeNull();
+  });
+
+  it('does not treat an arbitrary data directory (no package.json) as source', async () => {
+    // The fixtures root has no package.json of its own.
+    const resolver = new LocalSourceResolver();
+    const src = await resolver.resolve(server({ command: 'node', args: [SOURCE_FIXTURES] }));
+    expect(src).toBeNull();
+  });
 });
 
 describe('scan with source resolver', () => {

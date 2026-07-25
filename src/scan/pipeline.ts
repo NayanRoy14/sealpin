@@ -39,8 +39,8 @@ export async function scanServers(servers: ServerConfig[], options: ScanOptions 
   if (options.sourceResolver) {
     for (const server of servers) {
       try {
-        const source = await options.sourceResolver.resolve(server);
-        if (source) sources.set(server.name, source);
+        const resolved = await options.sourceResolver.resolve(server);
+        if (resolved) sources.set(server.name, resolved);
       } catch {
         // a source that can't be read must not abort the scan
       }

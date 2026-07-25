@@ -36,7 +36,9 @@ export function resolveManifestSource(opts: SourceOpts): ManifestSource | undefi
     });
   }
   if (opts.manifestDir) {
-    return new FileManifestSource(opts.manifestDir);
+    return new FileManifestSource(opts.manifestDir, {
+      onError: (server, message) => console.error(color.yellow(`  ! skipped manifest for ${server}: `) + message),
+    });
   }
   return undefined;
 }

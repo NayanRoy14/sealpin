@@ -1,10 +1,13 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { discoverFromFile } from '../src/discover/index.js';
 import { FileManifestSource, scanServers, hasFindingAtOrAbove } from '../src/scan/index.js';
 import { severityOf } from '../src/rules/index.js';
 import { renderJson, renderSarif, renderText } from '../src/report/index.js';
 import { setColorEnabled } from '../src/report/color.js';
+import { server } from './helpers.js';
 
 const SCAN_FIXTURES = join(__dirname, 'fixtures', 'scan');
 
@@ -15,6 +18,40 @@ async function runScan() {
   const source = new FileManifestSource(join(SCAN_FIXTURES, 'manifests'));
   return { servers, summary: await scanServers(servers, { manifestSource: source }) };
 }
+
+describe('FileManifestSource resilience', () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'sealpin-manifest-'));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('skips a malformed manifest file (returns null + onError) instead of throwing', async () => {
+    await writeFile(join(dir, 'bad.json'), '{ not valid json', 'utf-8');
+    const errors: string[] = [];
+    const src = new FileManifestSource(dir, { onError: (s, m) => errors.push(`${s}: ${m}`) });
+
+    const result = await src.load(server({ name: 'bad' }));
+    expect(result).toBeNull();
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('bad');
+  });
+
+  it('a bad manifest for one server does not abort the scan of the others', async () => {
+    await writeFile(join(dir, 'bad.json'), '{ broken', 'utf-8');
+    await writeFile(
+      join(dir, 'good.json'),
+      JSON.stringify({ server: 'good', tools: [{ name: 'ok', inputSchema: { type: 'object' } }] }),
+      'utf-8',
+    );
+    const servers = [server({ name: 'bad' }), server({ name: 'good' })];
+    const summary = await scanServers(servers, { manifestSource: new FileManifestSource(dir) });
+    expect(summary.serversScanned).toBe(2);
+    expect(summary.serversWithManifest).toBe(1); // only "good" loaded
+  });
+});
 
 describe('scan pipeline', () => {
   it('scans a fixture config end to end and reports the expected finding classes', async () => {

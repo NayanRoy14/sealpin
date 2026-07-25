@@ -1,5 +1,6 @@
+import { homedir } from 'node:os';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve as resolvePath } from 'node:path';
+import { dirname, extname, isAbsolute, join, relative, resolve as resolvePath } from 'node:path';
 import type { ServerConfig } from '../types/config.js';
 import type { ServerSource, SourceFile, SourceResolver } from './types.js';
 
@@ -19,8 +20,11 @@ export interface LocalSourceResolverOptions {
  * Resolves a server's source from the local filesystem — no network, no
  * execution. Two strategies, in order:
  *   1. An explicit `dir` (from --source-dir), applied to every server.
- *   2. Auto-detection: the first server arg that is an existing local file or
- *      directory, walked up to the nearest package.json.
+ *   2. Auto-detection, deliberately conservative: an arg that is a local
+ *      *source file* (walked up to its package root), or a *directory that
+ *      directly contains package.json*. Arbitrary data directories and
+ *      filesystem/drive/home roots are never treated as source — a
+ *      filesystem server's `/` argument is its operating target, not its code.
  * Returns null when no local source can be found (a plain `npx <pkg>` server
  * whose code only exists in the registry — that's the tarball resolver's job,
  * which is future work).
@@ -52,12 +56,41 @@ export class LocalSourceResolver implements SourceResolver {
       try {
         info = await stat(candidate);
       } catch {
-        continue;
+        continue; // not an existing local path
       }
-      const startDir = info.isDirectory() ? candidate : dirname(candidate);
-      return (await nearestPackageRoot(startDir)) ?? startDir;
+
+      if (info.isFile()) {
+        // Only a source file identifies the package; data files do not.
+        if (!SOURCE_EXT.has(extname(candidate).toLowerCase())) continue;
+        const dir = dirname(candidate);
+        return (await nearestPackageRoot(dir)) ?? dir;
+      }
+
+      if (info.isDirectory()) {
+        // A directory is source only if it is itself a package (has
+        // package.json). This deliberately excludes filesystem/drive/home
+        // roots and arbitrary data directories a server merely operates on.
+        if (isDangerousRoot(candidate)) continue;
+        if (await hasPackageJson(candidate)) return candidate;
+      }
     }
     return null;
+  }
+}
+
+function isDangerousRoot(path: string): boolean {
+  const p = path.replace(/[\\/]+$/, '') || '/';
+  if (p === '' || p === '/') return true;
+  if (/^[A-Za-z]:$/.test(p)) return true; // drive root (C:)
+  if (p === homedir().replace(/[\\/]+$/, '')) return true;
+  return false;
+}
+
+async function hasPackageJson(dir: string): Promise<boolean> {
+  try {
+    return (await stat(join(dir, 'package.json'))).isFile();
+  } catch {
+    return false;
   }
 }
 

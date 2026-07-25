@@ -37,6 +37,23 @@ describe('canonicalize / hashManifest', () => {
     const drifted = await loadManifest('filesystem-server.drifted.json');
     expect(hashManifest(drifted)).not.toBe(hashManifest(base));
   });
+
+  it('orders keys by code unit, not locale — so the hash is stable across machines', () => {
+    // Uppercase 'Z' (U+005A) sorts before lowercase 'a' (U+0061) in code-unit
+    // order, but AFTER it under many locale collations (e.g. en-US). Asserting
+    // code-unit order proves canonicalization does not depend on the runtime locale.
+    const manifest: ToolManifest = {
+      server: 's',
+      tools: [
+        {
+          name: 't',
+          inputSchema: { type: 'object', properties: { a: { type: 'string' }, Z: { type: 'string' } } },
+        },
+      ],
+    };
+    const out = canonicalize(manifest);
+    expect(out.indexOf('"Z"')).toBeLessThan(out.indexOf('"a"'));
+  });
 });
 
 describe('diffManifests', () => {

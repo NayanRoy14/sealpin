@@ -140,6 +140,21 @@ describe('MCP-C002 unrestricted exec', () => {
     const ctx = context({ name: 'github', command: 'npx', args: ['server-github'] }, []);
     expect(await unrestrictedExecRule.check(ctx)).toEqual([]);
   });
+
+  it('does not false-positive on an unrelated flag that merely contains "command"', async () => {
+    const ctx = context({ name: 'weather', command: 'npx', args: ['weather-mcp', '--command-timeout', '5'] }, []);
+    expect(await unrestrictedExecRule.check(ctx)).toEqual([]);
+  });
+
+  it('flags a server whose launch binary is a shell interpreter, even with an allowlist-looking arg', async () => {
+    const ctx = context({ name: 'runner', command: '/bin/bash', args: ['-c', 'only ls'] }, []);
+    expect(await unrestrictedExecRule.check(ctx)).toHaveLength(1);
+  });
+
+  it('flags a "terminal" server', async () => {
+    const ctx = context({ name: 'iterm', command: 'npx', args: ['iterm-mcp-terminal'] }, []);
+    expect(await unrestrictedExecRule.check(ctx)).toHaveLength(1);
+  });
 });
 
 describe('MCP-C003 plaintext secrets', () => {

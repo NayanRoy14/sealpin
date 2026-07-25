@@ -17,8 +17,16 @@ export interface ManifestSource {
   load(server: ServerConfig): Promise<ToolManifest | null>;
 }
 
+export interface FileManifestSourceOptions {
+  /** Called when a manifest file exists but is unreadable or invalid; that server is skipped. */
+  onError?: (server: string, message: string) => void;
+}
+
 export class FileManifestSource implements ManifestSource {
-  constructor(private readonly dir: string) {}
+  constructor(
+    private readonly dir: string,
+    private readonly options: FileManifestSourceOptions = {},
+  ) {}
 
   async load(server: ServerConfig): Promise<ToolManifest | null> {
     const path = join(this.dir, `${server.name}.json`);
@@ -26,14 +34,21 @@ export class FileManifestSource implements ManifestSource {
     try {
       raw = await readFile(path, 'utf-8');
     } catch (err) {
-      if (isNodeError(err) && err.code === 'ENOENT') return null;
-      throw err;
+      if (isNodeError(err) && err.code === 'ENOENT') return null; // no manifest for this server
+      this.options.onError?.(server.name, err instanceof Error ? err.message : String(err));
+      return null;
     }
     // Hostile input: validate the whole shape through zod before any rule
     // touches it. Force the manifest's server name to match the config so a
-    // mislabeled file can't smuggle findings under the wrong server.
-    const parsed = ToolManifestSchema.parse(JSON.parse(raw));
-    return { ...parsed, server: server.name };
+    // mislabeled file can't smuggle findings under the wrong server. A malformed
+    // file skips that one server rather than aborting the whole scan.
+    try {
+      const parsed = ToolManifestSchema.parse(JSON.parse(raw));
+      return { ...parsed, server: server.name };
+    } catch (err) {
+      this.options.onError?.(server.name, `invalid manifest at ${path}: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 }
 

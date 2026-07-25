@@ -141,6 +141,9 @@ export function wrapWithSandbox(command: string, args: string[], cwd: string): W
           '--tmpfs', '/tmp',
           '--proc', '/proc',
           '--dev', '/dev',
+          // The temp cwd lives under /tmp, which the tmpfs above just masked.
+          // Bind the real cwd back in (writable) so --chdir into it works.
+          '--bind', cwd, cwd,
           '--chdir', cwd,
           '--',
           command,

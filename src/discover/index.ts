@@ -5,13 +5,37 @@ import { discoverCursor } from './cursor.js';
 import { readJsonIfExists } from './fs-utils.js';
 import { normalize } from './normalize.js';
 
-export async function discoverServers(cwd = process.cwd()): Promise<ServerConfig[]> {
-  const [desktop, code, cursor] = await Promise.all([
-    discoverClaudeDesktop(),
-    discoverClaudeCode(cwd),
-    discoverCursor(cwd),
-  ]);
-  return [...desktop, ...code, ...cursor];
+export interface DiscoverOptions {
+  cwd?: string;
+  /** Called when one client's config can't be read/parsed; discovery continues for the rest. */
+  onWarn?: (client: McpClient, message: string) => void;
+}
+
+/**
+ * Discovers servers across all supported clients. A malformed config for one
+ * client (bad JSON, schema violation) is isolated: it is reported via `onWarn`
+ * and the other clients' servers are still returned, rather than aborting the
+ * whole scan.
+ */
+export async function discoverServers(options: DiscoverOptions = {}): Promise<ServerConfig[]> {
+  const cwd = options.cwd ?? process.cwd();
+  const sources: Array<[McpClient, () => Promise<ServerConfig[]>]> = [
+    ['claude-desktop', () => discoverClaudeDesktop()],
+    ['claude-code', () => discoverClaudeCode(cwd)],
+    ['cursor', () => discoverCursor(cwd)],
+  ];
+
+  const results = await Promise.all(
+    sources.map(async ([client, run]) => {
+      try {
+        return await run();
+      } catch (err) {
+        options.onWarn?.(client, err instanceof Error ? err.message : String(err));
+        return [];
+      }
+    }),
+  );
+  return results.flat();
 }
 
 /**
