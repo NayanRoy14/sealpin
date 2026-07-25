@@ -1,9 +1,25 @@
 import type { Finding, Rule } from '../../types/rule.js';
 import { makeFinding, snippet } from '../util.js';
-import { isNode, loc, parseFile, walk } from './ast.js';
+import { calleeName, isNode, loc, parseFile, walk, type AstNode } from './ast.js';
 
 const URL_RE = /(https?|wss?):\/\/([^/\s'"`${}]+)/i;
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]']);
+
+// Callees that actually perform a network request. A URL passed to anything
+// else (a logger, a deprecation-warning message, a test helper, `new URL()` used
+// only for parsing) is not egress and must not be flagged — that was the
+// dominant false-positive class when scanning real packages.
+const NETWORK_SINKS = new Set([
+  'fetch', 'request', 'get', 'post', 'put', 'patch', 'delete', 'del', 'head', 'options',
+  'connect', 'send', 'sendBeacon', 'axios', 'got', 'ky', 'superagent', 'undici', 'openUrl',
+]);
+const NETWORK_CONSTRUCTORS = new Set(['WebSocket', 'EventSource']);
+
+function newExpressionName(node: AstNode): string | null {
+  const callee = node['callee'];
+  if (isNode(callee) && callee.type === 'Identifier' && typeof callee['name'] === 'string') return callee['name'];
+  return null;
+}
 
 /** The literal URL string a node carries, if any (plain string or template head). */
 function literalUrl(node: unknown): string | null {
@@ -47,7 +63,16 @@ export const hardcodedEgressRule: Rule = {
       const ast = parseFile(file);
       if (!ast) continue;
       walk(ast, (node) => {
-        if (node.type !== 'CallExpression' && node.type !== 'NewExpression') return;
+        // Only URLs handed to an actual network sink count as egress.
+        if (node.type === 'CallExpression') {
+          const name = calleeName(node);
+          if (!name || !NETWORK_SINKS.has(name)) return;
+        } else if (node.type === 'NewExpression') {
+          const name = newExpressionName(node);
+          if (!name || !NETWORK_CONSTRUCTORS.has(name)) return;
+        } else {
+          return;
+        }
         const args = node['arguments'];
         if (!Array.isArray(args)) return;
         for (const arg of args) {

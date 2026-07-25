@@ -4,3 +4,4 @@ dist/
 .DS_Store
 coverage/
 .claude/settings.local.json
+scripts/ecosystem-results.json

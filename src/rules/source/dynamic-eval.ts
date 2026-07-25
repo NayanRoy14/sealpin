@@ -1,9 +1,23 @@
 import type { Finding, Rule } from '../../types/rule.js';
 import { makeFinding } from '../util.js';
-import { calleeName, isNode, loc, parseFile, sourceOf, walk, type AstNode } from './ast.js';
+import { isNode, loc, parseFile, sourceOf, walk, type AstNode } from './ast.js';
 
 function isNonLiteral(node: unknown): boolean {
   return isNode(node) && node.type !== 'StringLiteral';
+}
+
+/**
+ * The name of a callee ONLY when it is a bare global identifier (e.g. `eval(x)`,
+ * `require(x)`), not a member call (`fn.eval(x)`, `sap.ui.require([...])`). The
+ * dangerous sinks are the JS globals; a namesake method on some object is not
+ * `eval`/CommonJS-require and must not be flagged.
+ */
+function globalCalleeName(node: AstNode): string | null {
+  const callee = node['callee'];
+  if (isNode(callee) && callee.type === 'Identifier' && typeof callee['name'] === 'string') {
+    return callee['name'];
+  }
+  return null;
 }
 
 /**
@@ -45,12 +59,20 @@ export const dynamicEvalRule: Rule = {
 
 function classify(node: AstNode): { message: string } | null {
   if (node.type === 'CallExpression') {
-    const name = calleeName(node);
     const args = node['arguments'];
     const first = Array.isArray(args) ? args[0] : undefined;
+
+    // Only bare-global eval/require/import — never a namesake method call.
+    const name = globalCalleeName(node);
     if (name === 'eval') return { message: 'Use of eval().' };
-    if ((name === 'require' || name === 'import') && isNonLiteral(first)) {
-      return { message: `Dynamic ${name}() with a non-literal argument.` };
+    if ((name === 'require' || name === 'import') && isDynamicModuleArg(first)) {
+      return { message: `Dynamic ${name}() with a computed argument.` };
+    }
+
+    // import(...) with the dedicated Import callee node.
+    const callee = node['callee'];
+    if (isNode(callee) && callee.type === 'Import' && isDynamicModuleArg(first)) {
+      return { message: 'Dynamic import() with a computed argument.' };
     }
   }
   if (node.type === 'NewExpression') {
@@ -59,15 +81,16 @@ function classify(node: AstNode): { message: string } | null {
       return { message: 'Use of new Function() to build code at runtime.' };
     }
   }
-  // import(...) is often parsed as an Import callee inside a CallExpression;
-  // handle the Import node form too.
-  if (node.type === 'CallExpression') {
-    const callee = node['callee'];
-    if (isNode(callee) && callee.type === 'Import') {
-      const args = node['arguments'];
-      const first = Array.isArray(args) ? args[0] : undefined;
-      if (isNonLiteral(first)) return { message: 'Dynamic import() with a non-literal argument.' };
-    }
-  }
   return null;
+}
+
+/**
+ * A require()/import() argument that computes a module path at runtime. A bare
+ * array or object literal (as some plugin loaders pass) is not the dangerous
+ * "attacker chooses the module" case, so those are excluded.
+ */
+function isDynamicModuleArg(node: unknown): boolean {
+  if (!isNode(node)) return false;
+  if (node.type === 'StringLiteral' || node.type === 'ArrayExpression' || node.type === 'ObjectExpression') return false;
+  return true; // Identifier, BinaryExpression (concat), TemplateLiteral, MemberExpression, CallExpression, ...
 }
