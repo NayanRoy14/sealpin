@@ -38,6 +38,19 @@ export {
 // reporting
 export { renderText, renderJson, renderSarif, setColorEnabled, type ReportSummary } from './report/index.js';
 
+// capabilities (cross-server composition analysis)
+export {
+  inferCapabilities,
+  hasCapability,
+  evidenceFor,
+  ALL_CAPABILITIES,
+  CAPABILITY_LEG,
+  type Capability,
+  type CapabilityEvidence,
+  type CapabilitySet,
+  type TrifectaLeg,
+} from './capabilities/index.js';
+
 // resolve (source-code access for source/supply-chain rules)
 export {
   LocalSourceResolver,
