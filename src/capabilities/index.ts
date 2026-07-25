@@ -1,4 +1,5 @@
 export { inferCapabilities } from './infer.js';
+export { analyzeWorkspace, WORKSPACE_RULES, type WorkspaceRuleMeta } from './workspace.js';
 export {
   hasCapability,
   evidenceFor,

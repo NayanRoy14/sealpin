@@ -1,5 +1,6 @@
 import type { Finding, Severity } from '../types/rule.js';
 import { ALL_RULES, RULE_DOCS, severityOf } from '../rules/index.js';
+import { WORKSPACE_RULES } from '../capabilities/index.js';
 import type { ReportSummary } from './text.js';
 
 /** SARIF result level. GitHub renders error/warning/note distinctly. */
@@ -38,9 +39,7 @@ const VERSION = '0.1.0';
  * control exactly what GitHub code scanning ingests.
  */
 export function renderSarif(summary: ReportSummary): string {
-  const ruleIndex = new Map(ALL_RULES.map((r, i) => [r.id, i]));
-
-  const driverRules = ALL_RULES.map((rule) => {
+  const perServerRules = ALL_RULES.map((rule) => {
     const doc = RULE_DOCS[rule.id];
     return {
       id: rule.id,
@@ -56,6 +55,21 @@ export function renderSarif(summary: ReportSummary): string {
       },
     };
   });
+  const workspaceRules = WORKSPACE_RULES.map((rule) => ({
+    id: rule.id,
+    name: rule.title,
+    shortDescription: { text: rule.title },
+    fullDescription: { text: rule.summary },
+    defaultConfiguration: { level: sarifLevel(rule.severity) },
+    properties: {
+      category: rule.category,
+      confidence: rule.confidence,
+      attack: rule.attack,
+      'security-severity': securitySeverity(rule.severity),
+    },
+  }));
+  const driverRules = [...perServerRules, ...workspaceRules];
+  const ruleIndex = new Map(driverRules.map((r, i) => [r.id, i]));
 
   const results = summary.findings.map((f: Finding) => {
     const sev = severityOf(f.ruleId);

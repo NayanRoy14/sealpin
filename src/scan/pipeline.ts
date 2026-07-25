@@ -1,7 +1,8 @@
 import type { ServerConfig } from '../types/config.js';
 import type { ToolManifest } from '../types/manifest.js';
 import type { Finding, ScanContext, Severity } from '../types/rule.js';
-import { runRules, meetsSeverity, severityOf } from '../rules/index.js';
+import { runRules, meetsSeverity, severityOf, severityRank } from '../rules/index.js';
+import { analyzeWorkspace } from '../capabilities/index.js';
 import type { ReportSummary } from '../report/index.js';
 import type { ServerSource, SourceResolver } from '../resolve/index.js';
 import { emptyManifestSource, type ManifestSource } from './manifest-source.js';
@@ -57,7 +58,16 @@ export async function scanServers(servers: ServerConfig[], options: ScanOptions 
     };
   });
 
-  let findings: Finding[] = await runRules(contexts);
+  const perServer = await runRules(contexts);
+  // Cross-server (composition-level) analysis runs after per-server rules and
+  // reuses their findings to reinforce capability inference.
+  const crossServer = analyzeWorkspace(contexts, perServer);
+
+  let findings: Finding[] = [...perServer, ...crossServer].sort((a, b) => {
+    const bySeverity = severityRank(severityOf(a.ruleId)) - severityRank(severityOf(b.ruleId));
+    return bySeverity !== 0 ? bySeverity : a.ruleId.localeCompare(b.ruleId);
+  });
+
   if (options.minSeverity) {
     const min = options.minSeverity;
     findings = findings.filter((f) => meetsSeverity(severityOf(f.ruleId), min));

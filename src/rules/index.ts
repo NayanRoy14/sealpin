@@ -1,5 +1,8 @@
 import type { Finding, ScanContext, Severity } from '../types/rule.js';
 import { ALL_RULES } from './registry.js';
+import { WORKSPACE_RULES } from '../capabilities/workspace.js';
+
+const WORKSPACE_SEVERITY = new Map<string, Severity>(WORKSPACE_RULES.map((r) => [r.id, r.severity]));
 
 export const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
 
@@ -49,7 +52,7 @@ export async function runRules(contexts: ScanContext[]): Promise<Finding[]> {
 }
 
 export function severityOf(ruleId: string): Severity {
-  return ALL_RULES.find((r) => r.id === ruleId)?.severity ?? 'info';
+  return ALL_RULES.find((r) => r.id === ruleId)?.severity ?? WORKSPACE_SEVERITY.get(ruleId) ?? 'info';
 }
 
 export { ALL_RULES, getRule } from './registry.js';

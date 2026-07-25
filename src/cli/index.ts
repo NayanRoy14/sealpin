@@ -4,6 +4,7 @@ import { discoverServers, discoverFromFile } from '../discover/index.js';
 import type { ServerConfig } from '../types/config.js';
 import type { Severity } from '../types/rule.js';
 import { ALL_RULES, RULE_DOCS, getRule, meetsSeverity, severityOf } from '../rules/index.js';
+import { WORKSPACE_RULES } from '../capabilities/index.js';
 import { scanServers, hasFindingAtOrAbove, type ManifestSource } from '../scan/index.js';
 import type { Finding } from '../types/rule.js';
 import { LocalSourceResolver } from '../resolve/index.js';
@@ -256,6 +257,9 @@ program
       const doc = RULE_DOCS[rule.id];
       console.log(`${color.bold(rule.id)}  ${color.dim(`[${rule.severity}/${rule.confidence}]`)}  ${doc?.title ?? ''}`);
     }
+    for (const rule of WORKSPACE_RULES) {
+      console.log(`${color.bold(rule.id)}  ${color.dim(`[${rule.severity}/${rule.confidence}]`)}  ${rule.title}  ${color.dim('(cross-server)')}`);
+    }
   });
 
 program
@@ -263,17 +267,26 @@ program
   .argument('<ruleId>', 'rule id, e.g. MCP-P001')
   .description('Explain what a rule detects and why it matters')
   .action((ruleId: string) => {
+    const id = ruleId.toUpperCase();
     const rule = getRule(ruleId);
-    const doc = RULE_DOCS[rule?.id ?? ruleId.toUpperCase()];
-    if (!rule || !doc) {
-      console.error(color.red(`Unknown rule: ${ruleId}. Run 'sealpin rules' to list them.`));
-      process.exitCode = ExitCode.Error;
+    const doc = RULE_DOCS[rule?.id ?? id];
+    if (rule && doc) {
+      console.log(color.bold(`${rule.id} — ${doc.title}`));
+      console.log(color.dim(`severity: ${rule.severity} · confidence: ${rule.confidence} · category: ${rule.category} · ${doc.attack}`));
+      console.log('');
+      console.log(doc.summary);
       return;
     }
-    console.log(color.bold(`${rule.id} — ${doc.title}`));
-    console.log(color.dim(`severity: ${rule.severity} · confidence: ${rule.confidence} · category: ${rule.category} · ${doc.attack}`));
-    console.log('');
-    console.log(doc.summary);
+    const ws = WORKSPACE_RULES.find((r) => r.id === id);
+    if (ws) {
+      console.log(color.bold(`${ws.id} — ${ws.title}`));
+      console.log(color.dim(`severity: ${ws.severity} · confidence: ${ws.confidence} · category: ${ws.category} (cross-server) · ${ws.attack}`));
+      console.log('');
+      console.log(ws.summary);
+      return;
+    }
+    console.error(color.red(`Unknown rule: ${ruleId}. Run 'sealpin rules' to list them.`));
+    process.exitCode = ExitCode.Error;
   });
 
 // ---------------------------------------------------------------- helpers

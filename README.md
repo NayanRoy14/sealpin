@@ -79,6 +79,11 @@ Run `sealpin rules` for the live list, or `sealpin explain <id>` for any one rul
 | `MCP-S004` | high | A6 Secret exfiltration | Whole `process.env` captured (serialized/spread/passed), not a specific key |
 | `MCP-S005` | medium | A6 Secret exfiltration | Hardcoded external URL passed into a network call |
 | `MCP-S006` | high | A7 Command injection | `eval` / `new Function` / dynamic `require`/`import` |
+| `MCP-X001` | high | A1/A6 composition | **Lethal trifecta** — private-data + untrusted-content + exfil capabilities co-loaded in one context |
+| `MCP-X002` | critical | A7 composition | Untrusted-content server + command-execution capability in one context |
+| `MCP-X003` | high | A9 Confused deputy | One server both ingests untrusted content and holds a stored credential |
+
+The `MCP-X*` rules are **cross-server**: they reason about the *combination* of servers loaded in one agent context, catching attack paths no single-server check sees (a filesystem server + a web-fetch server + an outbound channel = an exfiltration path, even though each is individually fine). They run on config alone — no manifests required.
 
 The `MCP-S*` source rules (Node/TS only) need the server's source — pass `--source-dir` or run a server from a local path (auto-detected). `MCP-S001` (typosquat) works from the package name alone, no source required.
 

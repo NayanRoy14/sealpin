@@ -41,6 +41,8 @@ export { renderText, renderJson, renderSarif, setColorEnabled, type ReportSummar
 // capabilities (cross-server composition analysis)
 export {
   inferCapabilities,
+  analyzeWorkspace,
+  WORKSPACE_RULES,
   hasCapability,
   evidenceFor,
   ALL_CAPABILITIES,
@@ -49,6 +51,7 @@ export {
   type CapabilityEvidence,
   type CapabilitySet,
   type TrifectaLeg,
+  type WorkspaceRuleMeta,
 } from './capabilities/index.js';
 
 // resolve (source-code access for source/supply-chain rules)
