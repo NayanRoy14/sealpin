@@ -1,0 +1,62 @@
+# MCP server packages for the ecosystem study. One spec per line; # comments ok.
+# A mix of official reference servers, big-vendor servers, and community/weekend
+# projects — the latter are where real issues are most likely.
+
+# Official reference servers
+@modelcontextprotocol/server-filesystem
+@modelcontextprotocol/server-memory
+@modelcontextprotocol/server-everything
+@modelcontextprotocol/server-sequential-thinking
+
+# Big-vendor / well-known
+@playwright/mcp
+@browserstack/mcp-server
+@heroku/mcp-server
+@clerk/mcp-tools
+@salesforce/mcp-provider-code-analyzer
+@storybook/addon-mcp
+@sentry/mcp-server
+@notionhq/notion-mcp-server
+@upstash/context7-mcp
+@sap-ux/fiori-mcp-server
+@ui5/mcp-server
+@apify/actors-mcp-server
+@shortcut/mcp
+@mobilenext/mobile-mcp
+chrome-devtools-mcp
+@suekou/mcp-notion-server
+@transcend-io/mcp-server-workflows
+@solvapay/mcp
+@maz-ui/mcp
+
+# Community / popular
+figma-mcp
+ref-tools-mcp
+puppeteer-mcp-server
+enhanced-postgres-mcp-server
+@sylphlab/mcp-filesystem
+mcp-github-server
+rime-mcp
+@jsonresume/mcp
+ref-mcp-cli
+
+# Smaller / weekend-project tier
+@adversity/mcp-database
+@ahmetbarut/mcp-database-server
+@spilno/herald-mcp
+astra-insight-mcp
+@goke/mcp
+@skillfm/mcp
+@stackwright-pro/mcp
+@shrkcrft/mcp-server
+@datanexusmcp/mcp-server
+better-mcp-notion
+@n24q02m/better-notion-mcp
+@mieubrisse/notion-mcp-server
+@rekl0w/mcp-browser-console
+@mcp-browser-kit/server
+@rog0x/mcp-database-tools
+@ama-mcp/github
+@antidrift/mcp-notion
+@turingdance/database-mcp
+@edwardchu/mcp-database
