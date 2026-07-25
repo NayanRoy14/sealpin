@@ -93,7 +93,7 @@ export function renderSarif(summary: ReportSummary): string {
         tool: {
           driver: {
             name: 'sealpin',
-            informationUri: 'https://github.com/sealpin/sealpin',
+            informationUri: 'https://github.com/NayanRoy14/sealpin',
             version: VERSION,
             rules: driverRules,
           },
