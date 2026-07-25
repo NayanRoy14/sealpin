@@ -68,6 +68,14 @@ Run `sealpin rules` for the live list, or `sealpin explain <id>` for any one rul
 | `MCP-C001` | high | A5 Over-broad capability | Filesystem server rooted at `/`, a drive root, or `$HOME` |
 | `MCP-C002` | high | A5 Over-broad capability | Shell/command server with no visible command allowlist |
 | `MCP-C003` | medium | A6 Secret exfiltration | Live credentials stored in plaintext in the config `env` block |
+| `MCP-S001` | high | A8 Supply chain | Package name edit-distance 1 from a popular package — likely typosquat |
+| `MCP-S002` | high | A8 Supply chain | `preinstall`/`install`/`postinstall` script (runs on `npm install`) |
+| `MCP-S003` | critical | A7 Command injection | `child_process` exec/spawn with an interpolated command string |
+| `MCP-S004` | high | A6 Secret exfiltration | Whole `process.env` captured (serialized/spread/passed), not a specific key |
+| `MCP-S005` | medium | A6 Secret exfiltration | Hardcoded external URL passed into a network call |
+| `MCP-S006` | high | A7 Command injection | `eval` / `new Function` / dynamic `require`/`import` |
+
+The `MCP-S*` source rules (Node/TS only) need the server's source — pass `--source-dir` or run a server from a local path (auto-detected). `MCP-S001` (typosquat) works from the package name alone, no source required.
 
 Every finding carries a **confidence** level and, more importantly, a **rationale** — the *why*, not just the *what*. Findings never echo a detected secret back in full.
 
@@ -121,8 +129,9 @@ npm run dev -- scan --config test/fixtures/scan/config.json --manifest-dir test/
 ## Safety model
 
 - **`discover/`** reads config files. Untrusted input; everything is validated through [zod](https://zod.dev) before use.
-- **`probe/`** is the only component that executes third-party code, and only under `--probe`. It runs the server's launch command (never install scripts) inside an OS sandbox where available, with a scrubbed environment, an isolated temp cwd, a hard timeout, and an output byte cap. Every tool it reads is zod-validated before use. `resolve/` (tarball download/unpack, never executed) is future work.
-- **`rules/`** operate purely on already-parsed manifest and config data. No code execution.
+- **`probe/`** is the only component that executes third-party code, and only under `--probe`. It runs the server's launch command (never install scripts) inside an OS sandbox where available, with a scrubbed environment, an isolated temp cwd, a hard timeout, and an output byte cap. Every tool it reads is zod-validated before use.
+- **`resolve/`** reads server source from the local filesystem for the `MCP-S*` rules. It only ever *reads* files (`node_modules` excluded, bounded count/size) — nothing is executed. A registry/tarball resolver (download + unpack, still never executed) is future work.
+- **`rules/`** operate purely on already-parsed manifest, config, and source data — AST analysis via `@babel/parser`, no evaluation. No code execution.
 
 ## License
 

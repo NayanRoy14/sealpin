@@ -6,6 +6,12 @@ import { shadowingRule } from './prompt/shadowing.js';
 import { filesystemRootRule } from './capability/filesystem-root.js';
 import { unrestrictedExecRule } from './capability/unrestricted-exec.js';
 import { plaintextSecretsRule } from './capability/plaintext-secrets.js';
+import { typosquatRule } from './source/typosquat.js';
+import { installScriptsRule } from './source/install-scripts.js';
+import { commandInjectionRule } from './source/command-injection.js';
+import { envExfiltrationRule } from './source/env-exfiltration.js';
+import { hardcodedEgressRule } from './source/egress.js';
+import { dynamicEvalRule } from './source/dynamic-eval.js';
 
 /** Every rule sealpin ships. Order here is the order rules run and list in. */
 export const ALL_RULES: readonly Rule[] = [
@@ -20,6 +26,13 @@ export const ALL_RULES: readonly Rule[] = [
   filesystemRootRule,
   unrestrictedExecRule,
   plaintextSecretsRule,
+  // source & supply chain (A6, A7, A8) — Node/TS servers
+  commandInjectionRule,
+  dynamicEvalRule,
+  envExfiltrationRule,
+  typosquatRule,
+  installScriptsRule,
+  hardcodedEgressRule,
 ];
 
 export function getRule(id: string): Rule | undefined {

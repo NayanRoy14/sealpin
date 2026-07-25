@@ -1,5 +1,6 @@
 import type { ServerConfig } from './config.js';
 import type { ToolManifest } from './manifest.js';
+import type { ServerSource } from '../resolve/types.js';
 
 /**
  * Everything a Rule needs to inspect a single server. Populated by discover/
@@ -14,6 +15,12 @@ export interface ScanContext {
   server: ServerConfig;
   manifest: ToolManifest;
   workspace: ToolManifest[];
+  /**
+   * The server's resolved source, when a SourceResolver was configured and
+   * could locate it. Source-AST rules (A6/A7) no-op when this is undefined;
+   * name-based supply-chain rules (A8 typosquat) work from `server` alone.
+   */
+  source?: ServerSource;
 }
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';

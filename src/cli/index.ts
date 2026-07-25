@@ -5,6 +5,7 @@ import type { ServerConfig } from '../types/config.js';
 import type { Severity } from '../types/rule.js';
 import { ALL_RULES, RULE_DOCS, getRule } from '../rules/index.js';
 import { scanServers, hasFindingAtOrAbove, type ManifestSource } from '../scan/index.js';
+import { LocalSourceResolver } from '../resolve/index.js';
 import {
   lock,
   verify,
@@ -65,6 +66,7 @@ withManifestSource(
     .description('Scan discovered MCP servers for prompt-injection and capability risks')
     .addOption(configOption),
 )
+  .option('-s, --source-dir <dir>', 'analyze server source at this local path (enables source/supply-chain AST rules)')
   .option('--json', 'output findings as JSON')
   .option('--sarif', 'output findings as SARIF 2.1.0 (for GitHub code scanning)')
   .addOption(new Option('--severity <min>', 'hide findings below this severity').choices(SEVERITIES))
@@ -75,8 +77,10 @@ withManifestSource(
     try {
       const servers = await discover(opts);
       const source = resolveManifestSource(opts as SourceOpts);
+      const sourceResolver = new LocalSourceResolver(opts.sourceDir ? { dir: opts.sourceDir } : {});
       const summary = await scanServers(servers, {
         ...(source ? { manifestSource: source } : {}),
+        sourceResolver,
         ...(opts.severity ? { minSeverity: opts.severity as Severity } : {}),
       });
 

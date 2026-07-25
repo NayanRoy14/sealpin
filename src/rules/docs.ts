@@ -58,4 +58,34 @@ export const RULE_DOCS: Record<string, RuleDoc> = {
     attack: 'A6 Secret exfiltration',
     summary: 'Flags live credentials stored in plaintext in the MCP config env block, which is often world-readable, cloud-synced, or committed to a repo.',
   },
+  'MCP-S001': {
+    title: 'Likely typosquatted package',
+    attack: 'A8 Supply chain',
+    summary: 'Flags a configured package name that is edit-distance 1 from a popular MCP/npm package but is not that package — a likely lookalike that runs attacker code via npx.',
+  },
+  'MCP-S002': {
+    title: 'Install-time script',
+    attack: 'A8 Supply chain',
+    summary: 'Flags preinstall/install/postinstall scripts, which run automatically on `npm install` before any tool is called or reviewed.',
+  },
+  'MCP-S003': {
+    title: 'Command injection sink',
+    attack: 'A7 Command injection',
+    summary: 'Flags child_process exec/spawn calls whose command string is built from runtime values via template interpolation or string concatenation.',
+  },
+  'MCP-S004': {
+    title: 'Whole-environment capture',
+    attack: 'A6 Secret exfiltration',
+    summary: 'Flags code that captures the entire process.env object (serialize/enumerate/spread/pass) rather than reading specific keys — how a server scoops up every secret at once.',
+  },
+  'MCP-S005': {
+    title: 'Hardcoded egress host',
+    attack: 'A6 Secret exfiltration',
+    summary: 'Flags an external http/https/websocket URL passed into a network call — a fixed outbound destination, the phone-home half of an exfiltration channel.',
+  },
+  'MCP-S006': {
+    title: 'Dynamic code execution',
+    attack: 'A7 Command injection',
+    summary: 'Flags eval(), new Function(), and require()/import() with non-literal arguments — sinks that turn runtime data into executed code.',
+  },
 };

@@ -3,10 +3,13 @@ import type { ToolManifest } from '../types/manifest.js';
 import type { Finding, ScanContext, Severity } from '../types/rule.js';
 import { runRules, meetsSeverity, severityOf } from '../rules/index.js';
 import type { ReportSummary } from '../report/index.js';
+import type { ServerSource, SourceResolver } from '../resolve/index.js';
 import { emptyManifestSource, type ManifestSource } from './manifest-source.js';
 
 export interface ScanOptions {
   manifestSource?: ManifestSource;
+  /** When set, each server's source is resolved and made available to source-AST rules. */
+  sourceResolver?: SourceResolver;
   /** Drop findings below this severity from the report. */
   minSeverity?: Severity;
 }
@@ -31,11 +34,28 @@ export async function scanServers(servers: ServerConfig[], options: ScanOptions 
   }
 
   const workspace = [...manifests.values()];
-  const contexts: ScanContext[] = servers.map((server) => ({
-    server,
-    manifest: manifests.get(server.name) ?? { server: server.name, tools: [] },
-    workspace,
-  }));
+
+  const sources = new Map<string, ServerSource>();
+  if (options.sourceResolver) {
+    for (const server of servers) {
+      try {
+        const source = await options.sourceResolver.resolve(server);
+        if (source) sources.set(server.name, source);
+      } catch {
+        // a source that can't be read must not abort the scan
+      }
+    }
+  }
+
+  const contexts: ScanContext[] = servers.map((server) => {
+    const source = sources.get(server.name);
+    return {
+      server,
+      manifest: manifests.get(server.name) ?? { server: server.name, tools: [] },
+      workspace,
+      ...(source ? { source } : {}),
+    };
+  });
 
   let findings: Finding[] = await runRules(contexts);
   if (options.minSeverity) {

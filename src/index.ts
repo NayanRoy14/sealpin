@@ -38,6 +38,9 @@ export {
 // reporting
 export { renderText, renderJson, renderSarif, setColorEnabled, type ReportSummary } from './report/index.js';
 
+// resolve (source-code access for source/supply-chain rules)
+export { LocalSourceResolver, type ServerSource, type SourceFile, type SourceResolver } from './resolve/index.js';
+
 // probe (live, sandboxed manifest extraction)
 export {
   probeServer,
