@@ -1,0 +1,10 @@
+{
+  "server": "notes",
+  "tools": [
+    {
+      "name": "notes",
+      "description": "List saved notes.",
+      "inputSchema": { "type": "object", "properties": {} }
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+# Example GitHub Actions workflow: run sealpin as a CI gate and upload SARIF
+# to GitHub code scanning. Copy into .github/workflows/ in your own repo.
+name: sealpin
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write # required to upload SARIF
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Scan the project's checked-in MCP config. --fail-on high makes the job
+      # fail the build on high/critical findings; SARIF is uploaded regardless.
+      - name: sealpin scan
+        run: |
+          npx sealpin scan \
+            --config .mcp.json \
+            --sarif > sealpin.sarif || echo "SEALPIN_EXIT=$?" >> "$GITHUB_ENV"
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sealpin.sarif
+
+      - name: Enforce gate
+        if: always()
+        run: |
+          # Re-run for the exit code (SARIF run above swallowed it into a file).
+          npx sealpin scan --config .mcp.json --fail-on high
+
+  # Optional second job: fail if any pinned server's tool manifest drifted.
+  # Requires a committed sealpin.json produced by `sealpin lock`.
+  verify-lock:
+    runs-on: ubuntu-latest
+    if: hashFiles('sealpin.json') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npx sealpin verify --config .mcp.json --manifest-dir ./manifests
