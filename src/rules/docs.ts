@@ -74,9 +74,9 @@ export const RULE_DOCS: Record<string, RuleDoc> = {
     summary: 'Flags child_process exec/spawn calls whose command string is built from runtime values via template interpolation or string concatenation.',
   },
   'MCP-S004': {
-    title: 'Whole-environment capture',
+    title: 'Environment exfiltration',
     attack: 'A6 Secret exfiltration',
-    summary: 'Flags code that captures the entire process.env object (serialize/enumerate/spread/pass) rather than reading specific keys — how a server scoops up every secret at once.',
+    summary: 'Flags the whole process.env flowing into an outbound/network call (directly or via a variable it was assigned) using light intraprocedural taint. Env passed to a subprocess or dotenv loader is not flagged.',
   },
   'MCP-S005': {
     title: 'Hardcoded egress host',
@@ -86,6 +86,6 @@ export const RULE_DOCS: Record<string, RuleDoc> = {
   'MCP-S006': {
     title: 'Dynamic code execution',
     attack: 'A7 Command injection',
-    summary: 'Flags eval(), new Function(), and require()/import() with non-literal arguments — sinks that turn runtime data into executed code.',
+    summary: 'Flags eval(), new Function(), and require()/import() whose module path is data-derived. Internal fixed paths like import(join(__dirname, "…")) are not flagged.',
   },
 };

@@ -39,7 +39,9 @@ real issues are most likely.
   from every esbuild bundle, so **0 packages were unauditable** in this batch
   (an earlier, skip-the-whole-bundle approach left 6% opaque). Minified or
   non-esbuild bundles would still be opaque — none remained so here.
-- **36 (33%) had at least one finding.**
+- **18 (17%) had at least one finding** (down from 33% before the data-flow
+  refinements below — the reduction is false positives removed, not detections
+  lost).
 - **After triage, no confirmed, exploitable vulnerabilities.** A handful of
   servers interpolate runtime, tool-controlled values into shell execution — a
   genuine command-injection *shape* worth a maintainer's review. Those are being
@@ -56,9 +58,9 @@ findings that remain are on the server's own code (e.g. a Figma server's own
 |------|----------|------------------------------|
 | `MCP-S002` install script | 3% | Real `pre/postinstall` scripts — flagged for transparency (review the script), not presumed malicious. |
 | `MCP-S003` command injection | 5% | One common, defensible idiom (opening a URL in the browser during OAuth); and a genuine subset that interpolate tool-controlled values (a container name, a cron entry) into a shell command — privately disclosed. |
-| `MCP-S004` whole-env capture | 24% | Almost all benign: spreading `process.env` into a spawned child process, dotenv-style `parseEnv(process.env)`, config loading, one intentional demo tool. Low signal for actual exfiltration intent. |
+| `MCP-S004` env exfiltration | 0% | None. With the data-flow refinement, the rule now fires only when the *whole* `process.env` flows into an outbound call; no server in the batch does this. The 24% it flagged before were all env passed to a subprocess, a dotenv loader, or read inside an inbound route handler. |
 | `MCP-S005` hardcoded egress | 7% | All legitimate first-party endpoints — a Notion server calling `api.notion.com`, a Figma server calling `api.figma.com`, self-update checks against the npm registry. |
-| `MCP-S006` dynamic code exec | 5% | A vendored ONNX-Runtime WASM file (`new Function`); plugin loaders and internal `import(join(dir, "…"))` bin-wrappers. No attacker-controlled code execution. |
+| `MCP-S006` dynamic code exec | 4% | A vendored ONNX-Runtime WASM file (`new Function`); plugin loaders with genuinely data-derived module paths. Internal `import(join(__dirname, "…"))` bin-wrappers are no longer flagged. |
 
 ## What this says about the rules
 
@@ -74,16 +76,22 @@ The scan drove three real precision fixes, all regression-tested:
    command injection. Now only genuine `child_process` calls (a bare global
    `exec`/`spawn`, or a member on a `child_process`-like receiver); `db.exec`,
    `regexp.exec`, and similar are no longer flagged.
+4. **`MCP-S004` now uses intraprocedural data-flow.** It flags only when the
+   whole `process.env` reaches an outbound/network call — directly, or via a
+   variable it was assigned — and never counts env inside a nested function
+   body (an inbound route handler is not an outbound call). This took its false
+   positives from 24% of packages to 0 while still detecting the real
+   `fetch(url, { body: JSON.stringify(process.env) })` shape (unit-tested).
+5. **`MCP-S006` now checks argument provenance.** `require()`/`import()` is
+   flagged only when the module path is data-derived; a fixed internal path
+   built from string literals, `__dirname`/`import.meta`, and path helpers
+   (`import(join(__dirname, "…"))`) is not. `eval`/`new Function` still always
+   flag.
 
-Two honest limitations remain:
-
-- **`MCP-S004` (whole-env capture) has low precision.** Referencing the whole
-  environment is common and usually benign (passing env to a subprocess, loading
-  dotenv). Separating capture-then-*exfiltrate* from capture-then-*use* needs
-  data-flow analysis, beyond a deterministic AST-pattern rule.
-- **`MCP-S006` dynamic import/require** is dominated by plugin loaders and
-  internal relative-path imports (`import(join(__dirname, "…"))`), which are
-  low-signal. Same class of limitation.
+One honest limitation remains: the data-flow is **intraprocedural** — a capture
+in one function that is exfiltrated by another is not connected, and non-esbuild
+bundles (webpack/rollup) are not de-vendored, so a `new Function` from a bundled
+dependency can still surface. These are documented, not silently ignored.
 
 ## Responsible disclosure
 

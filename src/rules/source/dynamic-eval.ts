@@ -1,9 +1,49 @@
 import type { Finding, Rule } from '../../types/rule.js';
 import { makeFinding } from '../util.js';
-import { isNode, loc, parseFile, sourceOf, walk, type AstNode } from './ast.js';
+import { calleeName, isNode, loc, parseFile, sourceOf, walk, type AstNode } from './ast.js';
 
 function isNonLiteral(node: unknown): boolean {
   return isNode(node) && node.type !== 'StringLiteral';
+}
+
+// Identifiers that denote a base directory, not attacker-controlled data.
+const DIRNAME_LIKE = /^(?:__dirname|__filename|here|cwd|dir|dirname|root|rootdir|base|basedir|appdir|moduledir|currentdir|scriptdir)$/i;
+// Path-building functions whose all-literal/all-internal calls stay internal.
+const PATH_FNS = new Set(['join', 'resolve', 'normalize', 'dirname', 'fileURLToPath', 'pathToFileURL']);
+
+/**
+ * True when a module specifier is a *fixed internal path* — built only from
+ * string literals, dirname-like identifiers, `import.meta.*`, and path helpers.
+ * `import(join(__dirname, "../dist/x.js"))` is internal; `require(userInput)` or
+ * `import("plugins/" + name)` is not. This is the provenance check that keeps
+ * bin-wrappers and relative-import shims from being flagged.
+ */
+function isInternalPath(node: unknown): boolean {
+  if (!isNode(node)) return false;
+  switch (node.type) {
+    case 'StringLiteral':
+      return true;
+    case 'Identifier':
+      return typeof node['name'] === 'string' && DIRNAME_LIKE.test(node['name']);
+    case 'MemberExpression': {
+      const obj = node['object'];
+      return isNode(obj) && obj.type === 'MetaProperty'; // import.meta.url / import.meta.dirname
+    }
+    case 'TemplateLiteral': {
+      const exprs = node['expressions'];
+      return Array.isArray(exprs) && exprs.every(isInternalPath);
+    }
+    case 'BinaryExpression':
+      return node['operator'] === '+' && isInternalPath(node['left']) && isInternalPath(node['right']);
+    case 'CallExpression': {
+      const name = calleeName(node);
+      if (!name || !PATH_FNS.has(name)) return false;
+      const args = node['arguments'];
+      return Array.isArray(args) && args.every(isInternalPath);
+    }
+    default:
+      return false;
+  }
 }
 
 /**
@@ -65,14 +105,14 @@ function classify(node: AstNode): { message: string } | null {
     // Only bare-global eval/require/import — never a namesake method call.
     const name = globalCalleeName(node);
     if (name === 'eval') return { message: 'Use of eval().' };
-    if ((name === 'require' || name === 'import') && isDynamicModuleArg(first)) {
-      return { message: `Dynamic ${name}() with a computed argument.` };
+    if ((name === 'require' || name === 'import') && isDataDerivedModuleArg(first)) {
+      return { message: `Dynamic ${name}() with a data-derived argument.` };
     }
 
     // import(...) with the dedicated Import callee node.
     const callee = node['callee'];
-    if (isNode(callee) && callee.type === 'Import' && isDynamicModuleArg(first)) {
-      return { message: 'Dynamic import() with a computed argument.' };
+    if (isNode(callee) && callee.type === 'Import' && isDataDerivedModuleArg(first)) {
+      return { message: 'Dynamic import() with a data-derived argument.' };
     }
   }
   if (node.type === 'NewExpression') {
@@ -85,12 +125,14 @@ function classify(node: AstNode): { message: string } | null {
 }
 
 /**
- * A require()/import() argument that computes a module path at runtime. A bare
- * array or object literal (as some plugin loaders pass) is not the dangerous
- * "attacker chooses the module" case, so those are excluded.
+ * A require()/import() argument that computes the module path from *data* rather
+ * than a fixed internal location. Excludes string/array/object literals (static
+ * or plugin-list loads) and internal path expressions (`join(__dirname, "…")`,
+ * relative-import shims), leaving genuinely data-derived specifiers.
  */
-function isDynamicModuleArg(node: unknown): boolean {
+function isDataDerivedModuleArg(node: unknown): boolean {
   if (!isNode(node)) return false;
   if (node.type === 'StringLiteral' || node.type === 'ArrayExpression' || node.type === 'ObjectExpression') return false;
-  return true; // Identifier, BinaryExpression (concat), TemplateLiteral, MemberExpression, CallExpression, ...
+  if (isInternalPath(node)) return false;
+  return true; // Identifier, concat, template, member, call — derived from runtime values
 }

