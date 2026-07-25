@@ -1,19 +1,18 @@
 import type { ServerConfig } from '../types/config.js';
 import type { ToolManifest } from '../types/manifest.js';
-import { FileManifestSource } from '../scan/index.js';
+import type { ManifestSource } from '../scan/index.js';
 
 export interface LoadedManifests {
   manifests: ToolManifest[];
-  missing: string[]; // server names with no manifest file in the dir
+  missing: string[]; // server names the source could not produce a manifest for
 }
 
 /**
- * Loads a manifest for every server from a `--manifest-dir`. Servers without a
- * manifest file are reported in `missing` rather than silently dropped, so the
- * caller can warn that lock/verify only cover the servers it could read.
+ * Loads a manifest for every server from any ManifestSource (a --manifest-dir
+ * directory or a live --probe). Servers the source can't produce a manifest
+ * for are reported in `missing` rather than silently dropped.
  */
-export async function loadManifests(servers: ServerConfig[], dir: string): Promise<LoadedManifests> {
-  const source = new FileManifestSource(dir);
+export async function loadManifests(servers: ServerConfig[], source: ManifestSource): Promise<LoadedManifests> {
   const manifests: ToolManifest[] = [];
   const missing: string[] = [];
   for (const server of servers) {

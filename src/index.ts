@@ -37,3 +37,16 @@ export {
 
 // reporting
 export { renderText, renderJson, renderSarif, setColorEnabled, type ReportSummary } from './report/index.js';
+
+// probe (live, sandboxed manifest extraction)
+export {
+  probeServer,
+  ProbeManifestSource,
+  ProbeError,
+  buildProbeEnv,
+  wrapWithSandbox,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_MAX_OUTPUT_BYTES,
+  type ProbeOptions,
+  type Isolation,
+} from './probe/index.js';

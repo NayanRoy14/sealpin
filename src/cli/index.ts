@@ -4,7 +4,7 @@ import { discoverServers, discoverFromFile } from '../discover/index.js';
 import type { ServerConfig } from '../types/config.js';
 import type { Severity } from '../types/rule.js';
 import { ALL_RULES, RULE_DOCS, getRule } from '../rules/index.js';
-import { FileManifestSource, scanServers, hasFindingAtOrAbove } from '../scan/index.js';
+import { scanServers, hasFindingAtOrAbove, type ManifestSource } from '../scan/index.js';
 import {
   lock,
   verify,
@@ -17,6 +17,7 @@ import {
 import { renderText, renderJson, renderSarif, setColorEnabled } from '../report/index.js';
 import { color } from '../report/color.js';
 import { loadManifests } from './load-manifests.js';
+import { resolveManifestSource, SourceError, type SourceOpts } from './manifest-source.js';
 import { ExitCode } from './exit-codes.js';
 
 const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
@@ -45,15 +46,25 @@ program
 const configOption = new Option('-c, --config <path>', 'scan an explicit MCP config file instead of auto-discovering');
 const manifestDirOption = new Option(
   '-m, --manifest-dir <dir>',
-  'directory of <server>.json tool manifests (until sandboxed probing lands, manifests are supplied here)',
+  'directory of <server>.json tool manifests (static source; alternative to --probe)',
 );
 
+/** Options shared by every command that needs live tool manifests. */
+function withManifestSource(cmd: Command): Command {
+  return cmd
+    .addOption(manifestDirOption)
+    .option('--probe', 'extract manifests live by running each server in a sandbox (opt-in; executes third-party code)')
+    .addOption(new Option('--probe-timeout <ms>', 'per-server probe timeout in milliseconds').default('10000'))
+    .option('--require-sandbox', 'refuse to probe unless an OS network sandbox is available');
+}
+
 // ---------------------------------------------------------------- scan
-program
-  .command('scan')
-  .description('Scan discovered MCP servers for prompt-injection and capability risks')
-  .addOption(configOption)
-  .addOption(manifestDirOption)
+withManifestSource(
+  program
+    .command('scan')
+    .description('Scan discovered MCP servers for prompt-injection and capability risks')
+    .addOption(configOption),
+)
   .option('--json', 'output findings as JSON')
   .option('--sarif', 'output findings as SARIF 2.1.0 (for GitHub code scanning)')
   .addOption(new Option('--severity <min>', 'hide findings below this severity').choices(SEVERITIES))
@@ -63,8 +74,9 @@ program
     applyColor(opts);
     try {
       const servers = await discover(opts);
+      const source = resolveManifestSource(opts as SourceOpts);
       const summary = await scanServers(servers, {
-        ...(opts.manifestDir ? { manifestSource: new FileManifestSource(opts.manifestDir) } : {}),
+        ...(source ? { manifestSource: source } : {}),
         ...(opts.severity ? { minSeverity: opts.severity as Severity } : {}),
       });
 
@@ -81,21 +93,22 @@ program
   });
 
 // ---------------------------------------------------------------- lock
-program
-  .command('lock')
-  .description(`Write ${DEFAULT_LOCKFILE_NAME}, pinning the current tool manifest for every server`)
-  .addOption(configOption)
-  .addOption(manifestDirOption)
+withManifestSource(
+  program
+    .command('lock')
+    .description(`Write ${DEFAULT_LOCKFILE_NAME}, pinning the current tool manifest for every server`)
+    .addOption(configOption),
+)
   .option('-o, --out <path>', 'lockfile path', DEFAULT_LOCKFILE_NAME)
   .option('--no-color', 'disable ANSI colors')
   .action(async (opts) => {
     applyColor(opts);
     try {
-      const dir = requireManifestDir(opts);
+      const source = requireManifestSource(opts);
       const servers = await discover(opts);
-      const { manifests, missing } = await loadManifests(servers, dir);
+      const { manifests, missing } = await loadManifests(servers, source);
       if (manifests.length === 0) {
-        console.error(color.red('No manifests found in ') + dir + color.red('. Nothing to lock.'));
+        console.error(color.red('No manifests obtained. Nothing to lock.'));
         process.exitCode = ExitCode.Error;
         return;
       }
@@ -110,17 +123,18 @@ program
   });
 
 // ---------------------------------------------------------------- verify
-program
-  .command('verify')
-  .description(`Re-hash current manifests and compare against ${DEFAULT_LOCKFILE_NAME}`)
-  .addOption(configOption)
-  .addOption(manifestDirOption)
+withManifestSource(
+  program
+    .command('verify')
+    .description(`Re-hash current manifests and compare against ${DEFAULT_LOCKFILE_NAME}`)
+    .addOption(configOption),
+)
   .option('-l, --lockfile <path>', 'lockfile path', DEFAULT_LOCKFILE_NAME)
   .option('--no-color', 'disable ANSI colors')
   .action(async (opts) => {
     applyColor(opts);
     try {
-      const dir = requireManifestDir(opts);
+      const source = requireManifestSource(opts);
       const lockfile = await readLockfile(opts.lockfile);
       if (!lockfile) {
         console.error(color.red(`No lockfile at ${opts.lockfile}. Run 'sealpin lock' first.`));
@@ -128,7 +142,7 @@ program
         return;
       }
       const servers = await discover(opts);
-      const { manifests } = await loadManifests(servers, dir);
+      const { manifests } = await loadManifests(servers, source);
       const results = verify(manifests, lockfile);
 
       let drift = false;
@@ -164,17 +178,18 @@ program
   });
 
 // ---------------------------------------------------------------- diff
-program
-  .command('diff')
-  .description('Show a human-readable changeset between locked and current manifests')
-  .addOption(configOption)
-  .addOption(manifestDirOption)
+withManifestSource(
+  program
+    .command('diff')
+    .description('Show a human-readable changeset between locked and current manifests')
+    .addOption(configOption),
+)
   .option('-l, --lockfile <path>', 'lockfile path', DEFAULT_LOCKFILE_NAME)
   .option('--no-color', 'disable ANSI colors')
   .action(async (opts) => {
     applyColor(opts);
     try {
-      const dir = requireManifestDir(opts);
+      const source = requireManifestSource(opts);
       const lockfile = await readLockfile(opts.lockfile);
       if (!lockfile) {
         console.error(color.red(`No lockfile at ${opts.lockfile}. Run 'sealpin lock' first.`));
@@ -182,7 +197,7 @@ program
         return;
       }
       const servers = await discover(opts);
-      const { manifests } = await loadManifests(servers, dir);
+      const { manifests } = await loadManifests(servers, source);
       const currentByServer = new Map(manifests.map((m) => [m.server, m]));
 
       let anyChange = false;
@@ -249,14 +264,15 @@ program
   });
 
 // ---------------------------------------------------------------- helpers
-function requireManifestDir(opts: { manifestDir?: string }): string {
-  if (!opts.manifestDir) {
+function requireManifestSource(opts: SourceOpts): ManifestSource {
+  const source = resolveManifestSource(opts);
+  if (!source) {
     throw new UsageError(
-      "this command needs tool manifests. Pass --manifest-dir <dir> (a directory of <server>.json manifests). " +
-        'Live sandboxed extraction (--probe) lands in a later build session.',
+      'this command needs tool manifests. Either pass --probe (run each server in a sandbox to extract ' +
+        'its manifest) or --manifest-dir <dir> (a directory of <server>.json manifests).',
     );
   }
-  return opts.manifestDir;
+  return source;
 }
 
 function warnMissing(missing: string[]): void {
@@ -278,7 +294,8 @@ class UsageError extends Error {}
 
 function fail(err: unknown): void {
   const msg = err instanceof Error ? err.message : String(err);
-  console.error(color.red(err instanceof UsageError ? 'error: ' : 'scan failed: ') + msg);
+  const isUsage = err instanceof UsageError || err instanceof SourceError;
+  console.error(color.red(isUsage ? 'error: ' : 'scan failed: ') + msg);
   process.exitCode = ExitCode.Error;
 }
 

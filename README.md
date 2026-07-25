@@ -4,7 +4,7 @@
 
 sealpin is a supply-chain and prompt-injection scanner for [Model Context Protocol](https://modelcontextprotocol.io) servers. You point it at your MCP config and it tells you which servers can quietly read your SSH keys, which ones changed their tool definitions since you approved them, and which ones are hiding instructions to the model inside tool descriptions.
 
-> Status: **v1, pre-release.** The scanner, rule packs, and manifest lockfile all work end to end. Live sandboxed manifest extraction (`--probe`) is not built yet — manifests are supplied via `--manifest-dir` in the meantime (see [Manifests](#manifests)).
+> Status: **v1, pre-release.** The scanner, rule packs, manifest lockfile, and live sandboxed extraction (`--probe`) all work end to end. Static extraction (`--manifest-dir`) remains the default; probing is strictly opt-in (see [Manifests](#manifests)).
 
 ## Why
 
@@ -26,12 +26,15 @@ npx sealpin scan
 # 1. See what you're trusting, and get findings on the config alone
 sealpin scan
 
-# 2. Pin the current tool manifests
-sealpin lock --manifest-dir ./manifests
+# 2. Extract live tool manifests by running each server in a sandbox, and scan them
+sealpin scan --probe
 
-# 3. Later — did anything change since you approved it?
-sealpin verify --manifest-dir ./manifests    # exit 2 if a manifest drifted
-sealpin diff   --manifest-dir ./manifests     # show exactly what changed
+# 3. Pin the current tool manifests
+sealpin lock --probe
+
+# 4. Later — did anything change since you approved it?
+sealpin verify --probe    # exit 2 if a manifest drifted
+sealpin diff   --probe     # show exactly what changed
 ```
 
 ## The lockfile — the point of the tool
@@ -81,7 +84,19 @@ sealpin scan --fail-on critical      # exit 1 only on critical (default: high)
 
 ## Manifests
 
-Reading a server's tool manifest ultimately requires talking to the server, which means running third-party code. sealpin's hard safety rule is that it **never executes install scripts and never runs a server outside a sandbox**. The sandboxed handshake (`--probe`) is not built yet; until it is, supply manifests via `--manifest-dir <dir>`, a directory of `<server-name>.json` files each matching the tool-manifest shape. Config-only rules (`MCP-C001`–`C003`) still run on `sealpin scan` with no manifests at all.
+Reading a server's tool manifest ultimately requires talking to the server, which means running third-party code. Config-only rules (`MCP-C001`–`C003`) run on `sealpin scan` with **no manifests at all**; the prompt-layer rules and the lockfile need a manifest, which you obtain one of two ways:
+
+**`--manifest-dir <dir>` (static, default).** A directory of `<server-name>.json` files, each matching the tool-manifest shape. Nothing is executed.
+
+**`--probe` (live, opt-in).** sealpin runs each server through the MCP handshake to read its real `tools/list`, inside the strongest sandbox available on your platform. Safety invariants:
+
+- **Never runs install scripts.** Only the server's own launch command is executed — sealpin never runs `npm install`.
+- **Scrubbed environment.** The server gets an operational allowlist (`PATH`, etc.) plus its own declared `env` — your unrelated shell secrets are never inherited.
+- **Isolated cwd.** A fresh empty temp directory, not your project.
+- **OS isolation where available.** On Linux (bubblewrap/firejail) or macOS (`sandbox-exec`), network and filesystem are confined. On platforms without a sandbox (notably Windows), the probe is *process-only* and prints a warning that network is not blocked. Use `--require-sandbox` to hard-fail rather than probe without network isolation.
+- **Bounded.** A hard `--probe-timeout` and an output byte cap; the process tree is always killed and the temp dir removed.
+
+Because `--probe` executes code, it is never the default. `--manifest-dir` and config-only scanning require no execution at all.
 
 ## Discovery
 
@@ -106,7 +121,7 @@ npm run dev -- scan --config test/fixtures/scan/config.json --manifest-dir test/
 ## Safety model
 
 - **`discover/`** reads config files. Untrusted input; everything is validated through [zod](https://zod.dev) before use.
-- **`resolve/` / `probe/`** (not in this build) will download/unpack tarballs and run a sandboxed handshake — never install scripts, never with network or filesystem access.
+- **`probe/`** is the only component that executes third-party code, and only under `--probe`. It runs the server's launch command (never install scripts) inside an OS sandbox where available, with a scrubbed environment, an isolated temp cwd, a hard timeout, and an output byte cap. Every tool it reads is zod-validated before use. `resolve/` (tarball download/unpack, never executed) is future work.
 - **`rules/`** operate purely on already-parsed manifest and config data. No code execution.
 
 ## License
