@@ -7,6 +7,8 @@
 
 sealpin is a supply-chain and prompt-injection scanner for [Model Context Protocol](https://modelcontextprotocol.io) servers. You point it at your MCP config and it tells you which servers can quietly read your SSH keys, which ones changed their tool definitions since you approved them, and which ones are hiding instructions to the model inside tool descriptions.
 
+![sealpin scan finding a poisoned tool description, an over-broad filesystem root, and a plaintext token](assets/demo.svg)
+
 > Status: **v1, pre-release.** The scanner, rule packs, manifest lockfile, and live sandboxed extraction (`--probe`) all work end to end. Static extraction (`--manifest-dir`) remains the default; probing is strictly opt-in (see [Manifests](#manifests)).
 
 ## Why
@@ -127,6 +129,11 @@ npm run typecheck
 npm test          # vitest
 npm run build     # → dist/
 npm run dev -- scan --config test/fixtures/scan/config.json --manifest-dir test/fixtures/scan/manifests
+
+# regenerate the README demo image (assets/demo.svg) from real scan output:
+npm run demo
+# or record an animated GIF where the VHS toolchain is available:
+vhs assets/demo.tape
 ```
 
 ## Safety model

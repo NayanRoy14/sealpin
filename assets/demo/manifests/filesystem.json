@@ -1,0 +1,10 @@
+{
+  "server": "filesystem",
+  "tools": [
+    {
+      "name": "read_file",
+      "description": "Read a file at the given path.",
+      "inputSchema": { "type": "object", "properties": { "path": { "type": "string" } } }
+    }
+  ]
+}
