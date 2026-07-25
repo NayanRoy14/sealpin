@@ -111,6 +111,11 @@ function detectTrifecta(configPath: string, caps: CapabilitySet[]): Finding[] {
         'The "lethal trifecta" — private-data access, exposure to untrusted content, and an outbound channel in one agent context — is the canonical way an agent is hijacked: attacker text hidden in the untrusted content instructs the model to read secrets and send them out. Each server may be individually reasonable; the danger is the combination.',
       remediation:
         'Do not co-load untrusted-content, private-data, and exfiltration-capable servers in one agent context. Split them across separate agents/sessions, or remove the outbound/untrusted capability that is not needed.',
+      related: [
+        { server: u.server, file: configPath, note: 'untrusted-content entry point' },
+        { server: p.server, file: configPath, note: `private data (${pCap.capability})` },
+        { server: e.server, file: configPath, note: `exfiltration channel (${eCap.capability})` },
+      ],
     }),
   ];
 }
@@ -133,6 +138,10 @@ function detectUntrustedExec(configPath: string, caps: CapabilitySet[]): Finding
         'Untrusted content flowing into a context that also has command execution is a direct path from prompt injection to remote code execution on the host.',
       remediation:
         'Never co-load an untrusted-content server with a command-execution server. If execution is required, gate it behind an allowlist and isolate it from untrusted input.',
+      related: [
+        { server: u.server, file: configPath, note: 'untrusted-content entry point' },
+        { server: x.server, file: configPath, note: 'command execution' },
+      ],
     }),
   ];
 }

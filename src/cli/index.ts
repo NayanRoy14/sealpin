@@ -17,7 +17,7 @@ import {
   isEmptyDiff,
   DEFAULT_LOCKFILE_NAME,
 } from '../lockfile/index.js';
-import { renderText, renderJson, renderSarif, setColorEnabled } from '../report/index.js';
+import { renderText, renderJson, renderSarif, renderCapabilityGraph, setColorEnabled } from '../report/index.js';
 import { color } from '../report/color.js';
 import { loadManifests } from './load-manifests.js';
 import { resolveManifestSource, SourceError, type SourceOpts } from './manifest-source.js';
@@ -73,6 +73,7 @@ withManifestSource(
   .option('-s, --source-dir <dir>', 'analyze server source at this local path (enables source/supply-chain AST rules)')
   .option('--json', 'output findings as JSON')
   .option('--sarif', 'output findings as SARIF 2.1.0 (for GitHub code scanning)')
+  .option('--graph', 'output a mermaid capability/attack-graph of the servers and their composition paths')
   .addOption(new Option('--severity <min>', 'hide findings below this severity').choices(SEVERITIES))
   .addOption(new Option('--fail-on <severity>', 'exit 1 if any finding is at/above this severity').choices(SEVERITIES).default('high'))
   .option('--no-color', 'disable ANSI colors')
@@ -96,7 +97,8 @@ withManifestSource(
         ? { ...summary, findings: filterBySeverity(summary.findings, opts.severity as Severity) }
         : summary;
 
-      if (opts.json) console.log(renderJson(displayed));
+      if (opts.graph) console.log(renderCapabilityGraph(summary.contexts ?? [], summary.findings));
+      else if (opts.json) console.log(renderJson(displayed));
       else if (opts.sarif) console.log(renderSarif(displayed));
       else console.log(renderText(displayed));
 

@@ -85,6 +85,22 @@ Run `sealpin rules` for the live list, or `sealpin explain <id>` for any one rul
 
 The `MCP-X*` rules are **cross-server**: they reason about the *combination* of servers loaded in one agent context, catching attack paths no single-server check sees (a filesystem server + a web-fetch server + an outbound channel = an exfiltration path, even though each is individually fine). They run on config alone — no manifests required.
 
+`sealpin scan --graph` renders the servers and their composition paths as a mermaid **attack graph** — nodes coloured by role, the dangerous path highlighted:
+
+```mermaid
+flowchart LR
+  subgraph ctx["one agent context"]
+    web["web-search<br/>untrusted · egress"]:::untrusted
+    fs["filesystem /<br/>fs · secrets"]:::private
+    notify["notifier<br/>messaging"]:::exfil
+  end
+  web -. "1 · injection" .-> fs
+  fs == "2 · exfiltrate" ==> notify
+  classDef untrusted fill:#7c2d12,stroke:#f97316,color:#fff
+  classDef private fill:#7f1d1d,stroke:#ef4444,color:#fff
+  classDef exfil fill:#4c1d95,stroke:#a855f7,color:#fff
+```
+
 The `MCP-S*` source rules (Node/TS only) need the server's source — pass `--source-dir` or run a server from a local path (auto-detected). `MCP-S001` (typosquat) works from the package name alone, no source required.
 
 Every finding carries a **confidence** level and, more importantly, a **rationale** — the *why*, not just the *what*. Findings never echo a detected secret back in full.

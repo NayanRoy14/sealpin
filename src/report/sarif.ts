@@ -75,6 +75,11 @@ export function renderSarif(summary: ReportSummary): string {
     const sev = severityOf(f.ruleId);
     const uri = artifactUri(f);
     const region = f.location?.line !== undefined ? { region: { startLine: f.location.line } } : {};
+    const relatedLocations = (f.related ?? []).map((r) => ({
+      physicalLocation: { artifactLocation: { uri: (r.file ?? uri).replace(/\\/g, '/') } },
+      logicalLocations: r.server ? [{ name: r.server, fullyQualifiedName: r.server, kind: 'namespace' }] : [],
+      ...(r.note ? { message: { text: r.note } } : {}),
+    }));
     return {
       ruleId: f.ruleId,
       ruleIndex: ruleIndex.get(f.ruleId) ?? -1,
@@ -95,6 +100,7 @@ export function renderSarif(summary: ReportSummary): string {
           ],
         },
       ],
+      ...(relatedLocations.length ? { relatedLocations } : {}),
       properties: { server: f.server, evidence: f.evidence },
     };
   });

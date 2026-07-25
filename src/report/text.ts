@@ -1,4 +1,4 @@
-import type { Finding, Severity } from '../types/rule.js';
+import type { Finding, ScanContext, Severity } from '../types/rule.js';
 import { severityOf } from '../rules/index.js';
 import { color } from './color.js';
 
@@ -18,6 +18,8 @@ export interface ReportSummary {
   serversScanned: number;
   serversWithManifest: number;
   findings: Finding[];
+  /** The scan contexts, for the capability graph (--graph). Ignored by text/JSON/SARIF. */
+  contexts?: ScanContext[];
 }
 
 export function renderText(summary: ReportSummary): string {

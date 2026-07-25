@@ -36,7 +36,7 @@ export {
 } from './scan/index.js';
 
 // reporting
-export { renderText, renderJson, renderSarif, setColorEnabled, type ReportSummary } from './report/index.js';
+export { renderText, renderJson, renderSarif, renderCapabilityGraph, setColorEnabled, type ReportSummary } from './report/index.js';
 
 // capabilities (cross-server composition analysis)
 export {

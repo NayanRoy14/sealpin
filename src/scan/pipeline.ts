@@ -77,6 +77,7 @@ export async function scanServers(servers: ServerConfig[], options: ScanOptions 
     serversScanned: servers.length,
     serversWithManifest,
     findings,
+    contexts,
   };
 }
 

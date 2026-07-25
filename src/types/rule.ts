@@ -27,6 +27,13 @@ export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type Confidence = 'certain' | 'likely' | 'possible';
 export type RuleCategory = 'prompt' | 'capability' | 'source' | 'supply-chain';
 
+/** An additional server/location that participates in a finding (e.g. each server contributing to a trifecta). */
+export interface RelatedLocation {
+  server?: string;
+  file?: string;
+  note?: string;
+}
+
 export interface Finding {
   ruleId: string;
   server: string;
@@ -39,6 +46,8 @@ export interface Finding {
   evidence: string;
   rationale: string;
   remediation: string;
+  /** Other servers/locations involved — used by cross-server findings. */
+  related?: RelatedLocation[];
 }
 
 export interface Rule {
